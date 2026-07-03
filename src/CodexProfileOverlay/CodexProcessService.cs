@@ -73,21 +73,7 @@ internal sealed class CodexProcessService
             return;
         }
 
-        LaunchCodexFromCli();
-    }
-
-    public void LaunchCodexFromCli()
-    {
-        logger.Info("Falling back to 'codex app'.");
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "codex",
-            Arguments = "app",
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        startInfo.Environment.Remove("CODEX_HOME");
-        _ = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start 'codex app'.");
+        throw new InvalidOperationException("Could not find the installed Codex Desktop application.");
     }
 
     public async Task<bool> LoginProfileAsync(string profileDirectory, CancellationToken cancellationToken)
@@ -176,7 +162,7 @@ internal sealed class CodexProcessService
             using var process = Process.Start(new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"(Get-StartApps | Where-Object { $_.Name -eq 'Codex' -or $_.Name -like '*Codex*' } | Select-Object -First 1 -ExpandProperty AppID)\"",
+                Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"(Get-StartApps | Where-Object { $_.Name -eq 'Codex' } | Select-Object -First 1 -ExpandProperty AppID)\"",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = false,

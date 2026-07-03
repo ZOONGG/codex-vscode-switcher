@@ -791,14 +791,10 @@ internal sealed class OverlayController : IDisposable
         try
         {
             processService.LaunchCodex();
-            if (await WaitForCodexWindowAsync(cancellationToken, TimeSpan.FromSeconds(10)).ConfigureAwait(true))
+            if (!await WaitForCodexWindowAsync(cancellationToken, TimeSpan.FromSeconds(20)).ConfigureAwait(true))
             {
-                return;
+                throw new InvalidOperationException("Codex window did not appear after launch.");
             }
-
-            logger.Info("Codex window did not appear after Start menu launch. Trying CLI fallback.");
-            processService.LaunchCodexFromCli();
-            _ = await WaitForCodexWindowAsync(cancellationToken, TimeSpan.FromSeconds(20)).ConfigureAwait(true);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
