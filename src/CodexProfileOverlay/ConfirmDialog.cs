@@ -15,7 +15,7 @@ internal sealed class ConfirmDialog : Window
         Icon = AppIcons.WindowIcon;
         Width = 500;
         Height = 246;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        WindowStartupLocation = WindowStartupLocation.Manual;
         ResizeMode = ResizeMode.NoResize;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
@@ -167,6 +167,7 @@ internal sealed class ConfirmDialog : Window
             dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
 
+        DialogPlacement.CenterOnOwnerScreen(dialog, owner, nativeOwner);
         return dialog.ShowDialog() == true;
     }
 }

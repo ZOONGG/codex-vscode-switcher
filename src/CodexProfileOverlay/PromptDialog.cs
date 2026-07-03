@@ -17,7 +17,7 @@ internal sealed class PromptDialog : Window
         Icon = AppIcons.WindowIcon;
         Width = 460;
         Height = 224;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        WindowStartupLocation = WindowStartupLocation.Manual;
         ResizeMode = ResizeMode.NoResize;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
@@ -146,6 +146,7 @@ internal sealed class PromptDialog : Window
             dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
 
+        DialogPlacement.CenterOnOwnerScreen(dialog, owner, nativeOwner);
         return dialog.ShowDialog() == true ? dialog.Value : null;
     }
 }
