@@ -20,6 +20,7 @@ internal static class NativeMethods
     public const int DwmwaCloaked = 14;
     public const int DwmwaUseImmersiveDarkModeBefore20H1 = 19;
     public const int DwmwaUseImmersiveDarkMode = 20;
+    public const uint GaRoot = 2;
     public const int WmHotkey = 0x0312;
     public const int ModAlt = 0x0001;
     public const int ModControl = 0x0002;
@@ -58,6 +59,12 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 
+    [DllImport("user32.dll")]
+    public static extern IntPtr WindowFromPoint(NativePoint point);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
+
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     public static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int index);
 
@@ -93,6 +100,9 @@ internal static class NativeMethods
     [DllImport("user32.dll", EntryPoint = "GetWindowTextW", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern int GetWindowText(IntPtr hWnd, [Out] StringBuilder text, int maxCount);
 
+    [DllImport("user32.dll", EntryPoint = "GetClassNameW", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int GetClassName(IntPtr hWnd, [Out] StringBuilder className, int maxCount);
+
     [DllImport("dwmapi.dll")]
     public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
 
@@ -120,6 +130,13 @@ internal static class NativeMethods
     {
         var builder = new StringBuilder(512);
         _ = GetWindowText(hWnd, builder, builder.Capacity);
+        return builder.ToString();
+    }
+
+    public static string GetWindowClassName(IntPtr hWnd)
+    {
+        var builder = new StringBuilder(256);
+        _ = GetClassName(hWnd, builder, builder.Capacity);
         return builder.ToString();
     }
 }

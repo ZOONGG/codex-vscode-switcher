@@ -73,6 +73,11 @@ internal sealed class CodexProcessService
             return;
         }
 
+        LaunchCodexFromCli();
+    }
+
+    public void LaunchCodexFromCli()
+    {
         logger.Info("Falling back to 'codex app'.");
         var startInfo = new ProcessStartInfo
         {
@@ -82,7 +87,7 @@ internal sealed class CodexProcessService
             CreateNoWindow = true,
         };
         startInfo.Environment.Remove("CODEX_HOME");
-        _ = Process.Start(startInfo);
+        _ = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start 'codex app'.");
     }
 
     public async Task<bool> LoginProfileAsync(string profileDirectory, CancellationToken cancellationToken)
@@ -115,7 +120,7 @@ internal sealed class CodexProcessService
                 FileName = "explorer.exe",
                 Arguments = $"shell:AppsFolder\\{appId}",
                 UseShellExecute = true,
-            });
+            }) ?? throw new InvalidOperationException("Could not start Codex through Start menu AppUserModelID.");
             return true;
         }
 
@@ -127,7 +132,7 @@ internal sealed class CodexProcessService
             {
                 FileName = shortcut,
                 UseShellExecute = true,
-            });
+            }) ?? throw new InvalidOperationException("Could not start Codex through Start menu shortcut.");
             return true;
         }
 

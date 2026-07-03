@@ -69,7 +69,7 @@ internal sealed class OverlayController : IDisposable
         timer.Start();
         if (settings.LaunchCodexWhenOverlayStarts)
         {
-            processService.LaunchCodex();
+            _ = LaunchCodexAndWaitAsync(disposalTokenSource.Token);
         }
 
         Tick();
@@ -139,7 +139,7 @@ internal sealed class OverlayController : IDisposable
 
         trayIcon = new TrayIconService(localizer);
         trayIcon.ToggleOverlayRequested += ToggleOverlay;
-        trayIcon.OpenCodexRequested += processService.LaunchCodex;
+        trayIcon.OpenCodexRequested += () => _ = LaunchCodexAndWaitAsync(disposalTokenSource.Token);
         trayIcon.SettingsRequested += ShowSettingsWindow;
         trayIcon.ProfileSelected += profile => _ = SwitchProfileAsync(profile);
         trayIcon.StartWithWindowsChanged += enabled =>
@@ -183,9 +183,11 @@ internal sealed class OverlayController : IDisposable
 
         visibilityState.AutomaticDisplayEnabled = settings.ShowAutomaticallyWhenCodexOpens;
         visibilityState.MarkCodexAvailable(found.IsMinimized);
-        bool foregroundBelongsToCodexOrOverlay = ForegroundBelongsToCodexOrOverlay(found);
-        bool shouldShowOverlay = visibilityState.ShouldShowOverlay && foregroundBelongsToCodexOrOverlay;
-        overlayWindow!.AllowAutoShow = shouldShowOverlay;
+        bool foregroundBelongsToCodexOrOverlay = ForegroundBelongsToCodexOrOverlay(found, overlayWindow!.Handle);
+        bool shouldShowOverlay = visibilityState.ShouldShowOverlay
+            && foregroundBelongsToCodexOrOverlay
+            && IsCodexTopVisibleAtClientCenter(found);
+        overlayWindow.AllowAutoShow = shouldShowOverlay;
         if (!shouldShowOverlay)
         {
             overlayWindow.Hide();
@@ -268,34 +270,29 @@ internal sealed class OverlayController : IDisposable
             return;
         }
 
-        switching = true;
         EnsureOverlay();
-        overlayWindow!.Hide();
-        overlayWindow.AllowAutoShow = false;
-        trayIcon?.UpdateOverlayState(false);
-        overlayWindow.SetSwitching(true);
-        hotkeyManager?.Clear();
-        overlayWindow?.ShowNotification(localizer.Format("SwitchingToProfile", profileName));
+        switching = true;
+        overlayWindow!.SetSwitching(true);
         try
         {
-            bool allowForceClose = settings.ForceCloseFallback;
-            if (allowForceClose && settings.ConfirmBeforeForceClose)
+            if (settings.ConfirmBeforeForceClose && !ConfirmProfileSwitch(profileName))
             {
-                allowForceClose = MessageBox.Show(
-                    overlayWindow,
-                    localizer["ForceClosePrompt"],
-                    "Codex Profile Overlay",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning) == MessageBoxResult.Yes;
+                return;
             }
 
+            overlayWindow.Hide();
+            overlayWindow.AllowAutoShow = false;
+            trayIcon?.UpdateOverlayState(false);
+            hotkeyManager?.Clear();
+            overlayWindow.ShowNotification(localizer.Format("SwitchingToProfile", profileName));
+
+            bool allowForceClose = settings.ForceCloseFallback;
             await processService.CloseCodexAsync(settings.GracefulCloseTimeoutSeconds, allowForceClose, disposalTokenSource.Token).ConfigureAwait(true);
             await switchService.SwitchAsync(profileName, disposalTokenSource.Token).ConfigureAwait(true);
             RefreshProfiles();
             if (settings.LaunchCodexAfterSwitching)
             {
-                processService.LaunchCodex();
-                await WaitForCodexWindowAsync(disposalTokenSource.Token).ConfigureAwait(true);
+                await LaunchCodexAndWaitAsync(disposalTokenSource.Token).ConfigureAwait(true);
             }
 
             overlayWindow?.ShowNotification(localizer.Format("SwitchedToAccount", profileName));
@@ -344,10 +341,14 @@ internal sealed class OverlayController : IDisposable
 
             RefreshProfiles();
             overlayWindow?.ShowNotification(localizer["ProfileAdded"]);
-            MessageBoxResult switchNewProfile = dialogOwner is null
-                ? MessageBox.Show(localizer["SwitchNewProfile"], "Codex Profile Overlay", MessageBoxButton.YesNo, MessageBoxImage.Question)
-                : MessageBox.Show(dialogOwner, localizer["SwitchNewProfile"], "Codex Profile Overlay", MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (switchNewProfile == MessageBoxResult.Yes)
+            bool switchNewProfile = ConfirmDialog.Show(
+                dialogOwner,
+                dialogOwner is null ? CurrentCodexWindowHandle() : IntPtr.Zero,
+                localizer["ConfirmSwitchTitle"],
+                localizer["SwitchNewProfile"],
+                localizer["ConfirmSwitchPrimary"],
+                localizer["Cancel"]);
+            if (switchNewProfile)
             {
                 await SwitchProfileAsync(profileName).ConfigureAwait(true);
             }
@@ -449,7 +450,14 @@ internal sealed class OverlayController : IDisposable
             return;
         }
 
-        if (MessageBox.Show(profileManagerWindow, localizer["RemoveProfilePrompt"], localizer["Remove"], MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+        if (!ConfirmDialog.Show(
+            profileManagerWindow,
+            profileManagerWindow is null ? CurrentCodexWindowHandle() : IntPtr.Zero,
+            localizer["Remove"],
+            localizer["RemoveProfilePrompt"],
+            localizer["Remove"],
+            localizer["Cancel"],
+            danger: true))
         {
             return;
         }
@@ -601,10 +609,27 @@ internal sealed class OverlayController : IDisposable
         RefreshProfiles();
     }
 
-    private static bool ForegroundBelongsToCodexOrOverlay(CodexWindowInfo codexWindow)
+    private bool ConfirmProfileSwitch(string profileName)
+    {
+        return ConfirmDialog.Show(
+            PromptOwner(),
+            CurrentCodexWindowHandle(),
+            localizer["ConfirmSwitchTitle"],
+            localizer.Format("ConfirmSwitchPrompt", profileName),
+            localizer["ConfirmSwitchPrimary"],
+            localizer["Cancel"],
+            danger: true);
+    }
+
+    private static bool ForegroundBelongsToCodexOrOverlay(CodexWindowInfo codexWindow, IntPtr overlayHandle)
     {
         IntPtr foreground = NativeMethods.GetForegroundWindow();
         if (foreground == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        if (IsDesktopShellWindow(foreground))
         {
             return false;
         }
@@ -614,13 +639,82 @@ internal sealed class OverlayController : IDisposable
             return true;
         }
 
+        if (foreground == overlayHandle)
+        {
+            return false;
+        }
+
         NativeMethods.GetWindowThreadProcessId(foreground, out uint processId);
         return processId == Environment.ProcessId || processId == codexWindow.ProcessId;
     }
 
-    private async Task WaitForCodexWindowAsync(CancellationToken cancellationToken)
+    private static bool IsDesktopShellWindow(IntPtr hwnd)
     {
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(20);
+        string className = NativeMethods.GetWindowClassName(hwnd);
+        return className.Equals("Progman", StringComparison.OrdinalIgnoreCase)
+            || className.Equals("WorkerW", StringComparison.OrdinalIgnoreCase)
+            || className.Equals("Shell_TrayWnd", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsCodexTopVisibleAtClientCenter(CodexWindowInfo codexWindow)
+    {
+        if (codexWindow.IsMinimized || !NativeMethods.GetClientRect(codexWindow.Hwnd, out NativeRect clientRect))
+        {
+            return false;
+        }
+
+        var point = new NativePoint
+        {
+            X = Math.Max(0, clientRect.Width / 2),
+            Y = Math.Max(0, clientRect.Height / 2),
+        };
+
+        if (!NativeMethods.ClientToScreen(codexWindow.Hwnd, ref point))
+        {
+            return false;
+        }
+
+        IntPtr hit = NativeMethods.WindowFromPoint(point);
+        if (hit == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        IntPtr root = NativeMethods.GetAncestor(hit, NativeMethods.GaRoot);
+        if (root == codexWindow.Hwnd)
+        {
+            return true;
+        }
+
+        NativeMethods.GetWindowThreadProcessId(root == IntPtr.Zero ? hit : root, out uint processId);
+        return processId == codexWindow.ProcessId;
+    }
+
+    private async Task LaunchCodexAndWaitAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            processService.LaunchCodex();
+            if (await WaitForCodexWindowAsync(cancellationToken, TimeSpan.FromSeconds(10)).ConfigureAwait(true))
+            {
+                return;
+            }
+
+            logger.Info("Codex window did not appear after Start menu launch. Trying CLI fallback.");
+            processService.LaunchCodexFromCli();
+            _ = await WaitForCodexWindowAsync(cancellationToken, TimeSpan.FromSeconds(20)).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.Error("Could not launch Codex.", exception);
+            overlayWindow?.ShowError(localizer["CodexCouldNotLaunch"]);
+            trayIcon?.ShowBalloon("Codex Profile Overlay", localizer["CodexCouldNotLaunch"]);
+        }
+    }
+
+    private async Task<bool> WaitForCodexWindowAsync(CancellationToken cancellationToken, TimeSpan? timeout = null)
+    {
+        var deadline = DateTimeOffset.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(20));
         while (DateTimeOffset.UtcNow < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -631,11 +725,12 @@ internal sealed class OverlayController : IDisposable
                 attachedWindow = found;
                 overlayWindow?.AttachTo(found.Hwnd);
                 overlayWindow?.UpdatePlacement(found.Hwnd);
-                return;
+                return true;
             }
         }
 
         logger.Info("Timed out waiting for Codex window after launch.");
+        return false;
     }
 
     private static void OpenFolder(string folder)
