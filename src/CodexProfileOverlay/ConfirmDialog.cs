@@ -43,17 +43,12 @@ internal sealed class ConfirmDialog : Window
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
+        WindowDragHelper.Enable(this, chrome);
+
         var header = new Grid { Margin = new Thickness(0, 0, 0, 18) };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        header.MouseLeftButtonDown += (_, e) =>
-        {
-            if (e.ButtonState == MouseButtonState.Pressed)
-            {
-                DragMove();
-            }
-        };
 
         var badge = new Border
         {

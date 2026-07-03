@@ -36,6 +36,8 @@ internal sealed class PromptDialog : Window
             Padding = new Thickness(22),
         };
 
+        WindowDragHelper.Enable(this, chrome);
+
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -46,13 +48,6 @@ internal sealed class PromptDialog : Window
         var header = new Grid { Margin = new Thickness(0, 0, 0, 18) };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        header.MouseLeftButtonDown += (_, e) =>
-        {
-            if (e.ButtonState == MouseButtonState.Pressed)
-            {
-                DragMove();
-            }
-        };
         header.Children.Add(new TextBlock
         {
             Text = title,

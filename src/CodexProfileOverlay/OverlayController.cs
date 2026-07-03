@@ -186,7 +186,7 @@ internal sealed class OverlayController : IDisposable
         bool foregroundBelongsToCodexOrOverlay = ForegroundBelongsToCodexOrOverlay(found, overlayWindow!.Handle);
         bool shouldShowOverlay = visibilityState.ShouldShowOverlay
             && foregroundBelongsToCodexOrOverlay
-            && IsCodexTopVisibleAtClientCenter(found);
+            && IsCodexOrOverlayTopVisibleAtClientCenter(found);
         overlayWindow.AllowAutoShow = shouldShowOverlay;
         if (!shouldShowOverlay)
         {
@@ -641,7 +641,7 @@ internal sealed class OverlayController : IDisposable
 
         if (foreground == overlayHandle)
         {
-            return false;
+            return true;
         }
 
         NativeMethods.GetWindowThreadProcessId(foreground, out uint processId);
@@ -656,7 +656,7 @@ internal sealed class OverlayController : IDisposable
             || className.Equals("Shell_TrayWnd", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsCodexTopVisibleAtClientCenter(CodexWindowInfo codexWindow)
+    private static bool IsCodexOrOverlayTopVisibleAtClientCenter(CodexWindowInfo codexWindow)
     {
         if (codexWindow.IsMinimized || !NativeMethods.GetClientRect(codexWindow.Hwnd, out NativeRect clientRect))
         {
@@ -687,7 +687,7 @@ internal sealed class OverlayController : IDisposable
         }
 
         NativeMethods.GetWindowThreadProcessId(root == IntPtr.Zero ? hit : root, out uint processId);
-        return processId == codexWindow.ProcessId;
+        return processId == codexWindow.ProcessId || processId == Environment.ProcessId;
     }
 
     private async Task LaunchCodexAndWaitAsync(CancellationToken cancellationToken)
