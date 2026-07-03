@@ -43,6 +43,36 @@ public sealed class ProfileManagerServiceTests
     }
 
     [Fact]
+    public void CreateProfileDirectory_ReplacesIncompleteDirectoryForRetry()
+    {
+        using var temp = new TestLayout();
+        string incompleteDirectory = Path.Combine(temp.Paths.ProfilesDirectory, "retry-profile");
+        Directory.CreateDirectory(incompleteDirectory);
+        File.WriteAllText(Path.Combine(incompleteDirectory, "stale.tmp"), "leftover");
+        var service = CreateService(temp);
+
+        string directory = service.CreateProfileDirectory("retry-profile");
+
+        Assert.Equal(incompleteDirectory, directory);
+        Assert.True(File.Exists(Path.Combine(directory, "config.toml")));
+        Assert.False(File.Exists(Path.Combine(directory, "stale.tmp")));
+    }
+
+    [Fact]
+    public void RemoveIncompleteProfileDirectory_RemovesOnlyProfilesWithoutAuth()
+    {
+        using var temp = new TestLayout();
+        var service = CreateService(temp);
+        string incompleteDirectory = service.CreateProfileDirectory("unfinished");
+        temp.AddProfile("finished", "auth");
+
+        Assert.True(service.RemoveIncompleteProfileDirectory("unfinished"));
+        Assert.False(Directory.Exists(incompleteDirectory));
+        Assert.False(service.RemoveIncompleteProfileDirectory("finished"));
+        Assert.True(File.Exists(Path.Combine(temp.Paths.ProfilesDirectory, "finished", "auth.json")));
+    }
+
+    [Fact]
     public void RemoveProfile_MovesDirectoryAndProtectsActiveProfile()
     {
         using var temp = new TestLayout();

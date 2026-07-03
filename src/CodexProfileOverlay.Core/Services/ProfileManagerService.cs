@@ -80,7 +80,12 @@ public sealed class ProfileManagerService
 
         if (Directory.Exists(directory))
         {
-            throw new InvalidOperationException("A profile with that directory name already exists.");
+            if (File.Exists(Path.Combine(directory, "auth.json")))
+            {
+                throw new InvalidOperationException("A profile with that directory name already exists.");
+            }
+
+            RemoveIncompleteProfileDirectory(validName);
         }
 
         Directory.CreateDirectory(directory);
@@ -92,6 +97,28 @@ public sealed class ProfileManagerService
 
         UpsertMetadata(validName, validName);
         return directory;
+    }
+
+    public bool RemoveIncompleteProfileDirectory(string directoryName)
+    {
+        string validName = ProfileName.RequireValid(directoryName);
+        string directory = Path.GetFullPath(Path.Combine(paths.ProfilesDirectory, validName));
+        EnsureInsideProfilesRoot(directory);
+
+        if (!Directory.Exists(directory))
+        {
+            RemoveMetadata(validName);
+            return false;
+        }
+
+        if (File.Exists(Path.Combine(directory, "auth.json")))
+        {
+            return false;
+        }
+
+        Directory.Delete(directory, recursive: true);
+        RemoveMetadata(validName);
+        return true;
     }
 
     public void RenameDisplayName(string directoryName, string displayName)
@@ -210,6 +237,16 @@ public sealed class ProfileManagerService
         }
 
         metadataStore.Save(document);
+    }
+
+    private void RemoveMetadata(string directoryName)
+    {
+        ProfileMetadataDocument document = metadataStore.Load();
+        int removed = document.Profiles.RemoveAll(profile => string.Equals(profile.DirectoryName, directoryName, StringComparison.OrdinalIgnoreCase));
+        if (removed > 0)
+        {
+            metadataStore.Save(document);
+        }
     }
 
     private static ProfileMetadata CreateMetadata(string directoryName, int order, string? displayName = null)

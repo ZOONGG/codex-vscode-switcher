@@ -97,16 +97,82 @@ internal sealed class CodexProcessService
         var startInfo = new ProcessStartInfo
         {
             FileName = "cmd.exe",
-            Arguments = "/c codex login",
+            Arguments = "/d /c codex login",
             UseShellExecute = false,
-            CreateNoWindow = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
             WorkingDirectory = fullProfileDirectory,
         };
         startInfo.Environment["CODEX_HOME"] = fullProfileDirectory;
 
         using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start codex login.");
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        int loginUrlOpened = 0;
+        Task standardOutputTask = ReadLoginOutputAsync(process.StandardOutput, OpenLoginUrl);
+        Task standardErrorTask = ReadLoginOutputAsync(process.StandardError, OpenLoginUrl);
+
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            await Task.WhenAll(standardOutputTask, standardErrorTask).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+
+            throw;
+        }
+
         return process.ExitCode == 0 && File.Exists(Path.Combine(fullProfileDirectory, "auth.json"));
+
+        void OpenLoginUrl(string line)
+        {
+            string? url = FindLoginUrl(line);
+            if (url is null || Interlocked.Exchange(ref loginUrlOpened, 1) != 0)
+            {
+                return;
+            }
+
+            try
+            {
+                _ = Process.Start(new ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                logger.Error("Could not open browser for Codex login.", exception);
+            }
+        }
+    }
+
+    private static async Task ReadLoginOutputAsync(TextReader reader, Action<string> onLine)
+    {
+        string? line;
+        while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) is not null)
+        {
+            onLine(line);
+        }
+    }
+
+    private static string? FindLoginUrl(string line)
+    {
+        const string prefix = "https://auth.openai.com/oauth/authorize";
+        int start = line.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        int end = line.IndexOfAny([' ', '\t', '\r', '\n'], start);
+        string url = end < 0 ? line[start..] : line[start..end];
+        return Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ? uri.AbsoluteUri : null;
     }
 
     private bool TryLaunchStartMenuApp()

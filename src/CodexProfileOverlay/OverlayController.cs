@@ -328,13 +328,17 @@ internal sealed class OverlayController : IDisposable
             return;
         }
 
+        string? createdProfileName = null;
         try
         {
             string directory = profileManager.CreateProfileDirectory(profileName);
+            createdProfileName = profileName;
             overlayWindow?.ShowNotification(localizer.Format("StartingLogin", profileName));
             bool loginCreatedAuth = await processService.LoginProfileAsync(directory, disposalTokenSource.Token).ConfigureAwait(true);
             if (!loginCreatedAuth)
             {
+                RemoveIncompleteProfile(createdProfileName);
+                RefreshProfiles();
                 overlayWindow?.ShowError(localizer["AuthNotCreated"]);
                 return;
             }
@@ -355,8 +359,27 @@ internal sealed class OverlayController : IDisposable
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            RemoveIncompleteProfile(createdProfileName);
+            RefreshProfiles();
             logger.Error("Add profile failed.", exception);
             overlayWindow?.ShowError(localizer["CouldNotAddProfile"]);
+        }
+    }
+
+    private void RemoveIncompleteProfile(string? profileName)
+    {
+        if (string.IsNullOrWhiteSpace(profileName))
+        {
+            return;
+        }
+
+        try
+        {
+            _ = profileManager.RemoveIncompleteProfileDirectory(profileName);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            logger.Error("Could not remove incomplete profile directory.", exception);
         }
     }
 
