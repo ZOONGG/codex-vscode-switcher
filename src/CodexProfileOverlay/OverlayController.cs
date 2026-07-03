@@ -22,6 +22,7 @@ internal sealed class OverlayController : IDisposable
     private readonly AppPaths paths;
     private readonly OverlayVisibilityState visibilityState = new();
     private readonly CancellationTokenSource disposalTokenSource = new();
+    private readonly Dictionary<string, ProfileLoginAttempt> activeProfileLogins = new(StringComparer.OrdinalIgnoreCase);
     private OverlaySettings settings;
     private Localizer localizer;
     private TrayIconService? trayIcon;
@@ -328,13 +329,21 @@ internal sealed class OverlayController : IDisposable
             return;
         }
 
+        string? validProfileName = null;
         string? createdProfileName = null;
+        ProfileLoginAttempt? loginAttempt = null;
         try
         {
-            string directory = profileManager.CreateProfileDirectory(profileName);
-            createdProfileName = profileName;
-            overlayWindow?.ShowNotification(localizer.Format("StartingLogin", profileName));
-            bool loginCreatedAuth = await processService.LoginProfileAsync(directory, disposalTokenSource.Token).ConfigureAwait(true);
+            validProfileName = ProfileName.RequireValid(profileName);
+            await CancelProfileLoginAsync(validProfileName).ConfigureAwait(true);
+
+            loginAttempt = new ProfileLoginAttempt(CancellationTokenSource.CreateLinkedTokenSource(disposalTokenSource.Token));
+            activeProfileLogins[validProfileName] = loginAttempt;
+
+            string directory = profileManager.CreateProfileDirectory(validProfileName);
+            createdProfileName = validProfileName;
+            overlayWindow?.ShowNotification(localizer.Format("StartingLogin", validProfileName));
+            bool loginCreatedAuth = await processService.LoginProfileAsync(directory, loginAttempt.Cancellation.Token).ConfigureAwait(true);
             if (!loginCreatedAuth)
             {
                 RemoveIncompleteProfile(createdProfileName);
@@ -354,8 +363,13 @@ internal sealed class OverlayController : IDisposable
                 localizer["Cancel"]);
             if (switchNewProfile)
             {
-                await SwitchProfileAsync(profileName).ConfigureAwait(true);
+                await SwitchProfileAsync(validProfileName).ConfigureAwait(true);
             }
+        }
+        catch (OperationCanceledException) when (!disposalTokenSource.IsCancellationRequested)
+        {
+            RemoveIncompleteProfile(createdProfileName);
+            RefreshProfiles();
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -363,6 +377,19 @@ internal sealed class OverlayController : IDisposable
             RefreshProfiles();
             logger.Error("Add profile failed.", exception);
             overlayWindow?.ShowError(localizer["CouldNotAddProfile"]);
+        }
+        finally
+        {
+            if (validProfileName is not null && loginAttempt is not null)
+            {
+                if (activeProfileLogins.TryGetValue(validProfileName, out ProfileLoginAttempt? activeAttempt) && ReferenceEquals(activeAttempt, loginAttempt))
+                {
+                    activeProfileLogins.Remove(validProfileName);
+                }
+
+                loginAttempt.Complete();
+                loginAttempt.Dispose();
+            }
         }
     }
 
@@ -380,6 +407,52 @@ internal sealed class OverlayController : IDisposable
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             logger.Error("Could not remove incomplete profile directory.", exception);
+        }
+    }
+
+    private async Task CancelProfileLoginAsync(string profileName)
+    {
+        if (!activeProfileLogins.TryGetValue(profileName, out ProfileLoginAttempt? loginAttempt))
+        {
+            return;
+        }
+
+        loginAttempt.Cancel();
+        Task completed = await Task.WhenAny(
+            loginAttempt.Completion,
+            Task.Delay(TimeSpan.FromSeconds(5), disposalTokenSource.Token)).ConfigureAwait(true);
+        if (completed != loginAttempt.Completion)
+        {
+            logger.Info($"Timed out waiting for previous login attempt for '{profileName}' to stop.");
+        }
+    }
+
+    private sealed class ProfileLoginAttempt : IDisposable
+    {
+        private readonly TaskCompletionSource completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ProfileLoginAttempt(CancellationTokenSource cancellation)
+        {
+            Cancellation = cancellation;
+        }
+
+        public CancellationTokenSource Cancellation { get; }
+
+        public Task Completion => completion.Task;
+
+        public void Cancel()
+        {
+            Cancellation.Cancel();
+        }
+
+        public void Complete()
+        {
+            completion.TrySetResult();
+        }
+
+        public void Dispose()
+        {
+            Cancellation.Dispose();
         }
     }
 

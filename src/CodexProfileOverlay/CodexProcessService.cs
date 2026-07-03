@@ -108,9 +108,8 @@ internal sealed class CodexProcessService
         startInfo.Environment["CODEX_HOME"] = fullProfileDirectory;
 
         using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start codex login.");
-        int loginUrlOpened = 0;
-        Task standardOutputTask = ReadLoginOutputAsync(process.StandardOutput, OpenLoginUrl);
-        Task standardErrorTask = ReadLoginOutputAsync(process.StandardError, OpenLoginUrl);
+        Task standardOutputTask = DrainReaderAsync(process.StandardOutput);
+        Task standardErrorTask = DrainReaderAsync(process.StandardError);
 
         try
         {
@@ -124,55 +123,20 @@ internal sealed class CodexProcessService
                 process.Kill(entireProcessTree: true);
             }
 
+            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+            await Task.WhenAll(standardOutputTask, standardErrorTask).ConfigureAwait(false);
             throw;
         }
 
         return process.ExitCode == 0 && File.Exists(Path.Combine(fullProfileDirectory, "auth.json"));
-
-        void OpenLoginUrl(string line)
-        {
-            string? url = FindLoginUrl(line);
-            if (url is null || Interlocked.Exchange(ref loginUrlOpened, 1) != 0)
-            {
-                return;
-            }
-
-            try
-            {
-                _ = Process.Start(new ProcessStartInfo
-                {
-                    FileName = url,
-                    UseShellExecute = true,
-                });
-            }
-            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
-            {
-                logger.Error("Could not open browser for Codex login.", exception);
-            }
-        }
     }
 
-    private static async Task ReadLoginOutputAsync(TextReader reader, Action<string> onLine)
+    private static async Task DrainReaderAsync(TextReader reader)
     {
-        string? line;
-        while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) is not null)
+        char[] buffer = new char[4096];
+        while (await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false) > 0)
         {
-            onLine(line);
         }
-    }
-
-    private static string? FindLoginUrl(string line)
-    {
-        const string prefix = "https://auth.openai.com/oauth/authorize";
-        int start = line.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
-        if (start < 0)
-        {
-            return null;
-        }
-
-        int end = line.IndexOfAny([' ', '\t', '\r', '\n'], start);
-        string url = end < 0 ? line[start..] : line[start..end];
-        return Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ? uri.AbsoluteUri : null;
     }
 
     private bool TryLaunchStartMenuApp()
