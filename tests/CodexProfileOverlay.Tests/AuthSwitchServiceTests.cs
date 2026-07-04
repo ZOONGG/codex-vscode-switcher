@@ -27,6 +27,65 @@ public sealed class AuthSwitchServiceTests
     }
 
     [Fact]
+    public async Task SwitchAsync_SavesCurrentCodexStateToPreviousProfile()
+    {
+        using var temp = new TestLayout();
+        temp.AddProfile("current", "old-profile-auth");
+        temp.AddProfile("target", "target-auth");
+        temp.WriteSharedAuth("fresh-current-auth");
+        temp.WriteSharedState("current-chat-state");
+        temp.ActiveProfileStore.Write("current");
+
+        var service = temp.CreateSwitchService();
+
+        await service.SwitchAsync("target");
+
+        Assert.Equal("current-chat-state", temp.ReadProfileStateFile("current", ".codex-global-state.json"));
+        Assert.Equal("shared-index-current-chat-state", temp.ReadProfileStateFile("current", "session_index.jsonl"));
+        Assert.Equal("shared-db-current-chat-state", temp.ReadProfileStateFile("current", "state_5.sqlite"));
+    }
+
+    [Fact]
+    public async Task SwitchAsync_RestoresTargetCodexStateWhenProfileHasState()
+    {
+        using var temp = new TestLayout();
+        temp.AddProfile("current", "old-profile-auth");
+        temp.AddProfile("target", "target-auth");
+        temp.WriteSharedAuth("fresh-current-auth");
+        temp.WriteSharedState("current-chat-state");
+        temp.WriteProfileState("target", "target-chat-state");
+        temp.ActiveProfileStore.Write("current");
+
+        var service = temp.CreateSwitchService();
+
+        await service.SwitchAsync("target");
+
+        Assert.Equal("target-chat-state", temp.ReadSharedStateFile(".codex-global-state.json"));
+        Assert.Equal("profile-index-target-chat-state", temp.ReadSharedStateFile("session_index.jsonl"));
+        Assert.Equal("profile-db-target-chat-state", temp.ReadSharedStateFile("state_5.sqlite"));
+    }
+
+    [Fact]
+    public async Task SwitchAsync_ClearsSharedCodexStateWhenTargetProfileHasNoState()
+    {
+        using var temp = new TestLayout();
+        temp.AddProfile("current", "old-profile-auth");
+        temp.AddProfile("target", "target-auth");
+        temp.WriteSharedAuth("fresh-current-auth");
+        temp.WriteSharedState("current-chat-state");
+        temp.ActiveProfileStore.Write("current");
+
+        var service = temp.CreateSwitchService();
+
+        await service.SwitchAsync("target");
+
+        Assert.False(temp.SharedStateFileExists(".codex-global-state.json"));
+        Assert.False(temp.SharedStateFileExists("session_index.jsonl"));
+        Assert.False(temp.SharedStateFileExists("state_5.sqlite"));
+        Assert.False(temp.SharedStateDirectoryExists("sessions"));
+    }
+
+    [Fact]
     public async Task SwitchAsync_WhenReplaceFails_RestoresPreviousSharedAuth()
     {
         using var temp = new TestLayout();

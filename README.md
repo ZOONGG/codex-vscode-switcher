@@ -4,7 +4,7 @@
 
 **A safe, local Windows account switcher for the Codex desktop app.**
 
-Switch between multiple Codex accounts from an overlay attached directly to the Codex window — with tray controls, global hotkeys, shared chats/settings, multi-monitor support, and automatic rollback if a switch fails.
+Switch between multiple Codex accounts from an overlay attached directly to the Codex window — with tray controls, global hotkeys, per-account chats/settings, multi-monitor support, and automatic rollback if a switch fails.
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white)](https://github.com/ZOONGG/codex-swap-account)
 [![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
@@ -42,7 +42,7 @@ Codex Swap Account turns that into a one-click action:
 1. choose a profile in the overlay, tray menu, or with a hotkey;
 2. the app safely saves the current profile state;
 3. Codex restarts with the selected account;
-4. your projects, chats, settings, history, and local workspace stay shared.
+4. your real workspace folders stay shared, while Codex chats and session state follow the selected account.
 
 The app runs quietly in the system tray and only shows the overlay when a verified Codex window is available.
 
@@ -51,7 +51,7 @@ The app runs quietly in the system tray and only shows the overlay when a verifi
 | | Feature |
 |---|---|
 | **Fast switching** | Switch accounts from the overlay, tray menu, or `Ctrl + Alt + 1…9`. |
-| **Shared workspace** | Keep the same Codex chats, projects, settings, history, caches, and databases across accounts. |
+| **Per-account Codex state** | Switch chats, projects, session history, and local Codex databases with the selected account while keeping real workspace folders in place. |
 | **Compact and expanded modes** | Use a minimal dropdown or a one-click segmented profile bar. |
 | **Safe transaction** | Back up the active authorization and automatically roll back if switching fails. |
 | **Multi-monitor ready** | The overlay follows Codex across monitors, window moves, resizes, and DPI changes. |
@@ -168,17 +168,17 @@ Codex normally stores local state under:
 %USERPROFILE%\.codex
 ```
 
-Codex Swap Account keeps that directory shared between all profiles so your local environment remains consistent:
+Codex Swap Account keeps the directory location stable, but switches the account-scoped Codex state inside it:
 
 ```text
 %USERPROFILE%\.codex
-├── chats / sessions
-├── projects
+├── chats / sessions  ← switched per profile
+├── projects          ← switched per profile
 ├── settings
-├── history
+├── history           ← switched per profile
 ├── caches
 ├── databases
-└── auth.json        ← only this file is switched
+└── auth.json         ← switched per profile
 ```
 
 Saved account profiles are stored separately:
@@ -197,14 +197,15 @@ During a switch, the app:
 
 1. prevents concurrent switch operations;
 2. closes Codex gracefully;
-3. saves the freshly updated shared `auth.json` back to the active profile;
-4. creates a backup of the current shared authorization;
-5. atomically replaces the shared `auth.json` with the selected profile;
-6. records the active profile only after replacement succeeds;
-7. launches Codex normally;
-8. restores the previous authorization if any critical step fails.
+3. saves the freshly updated `auth.json` and Codex chat/session state back to the active profile;
+4. creates a backup of the current authorization and Codex state;
+5. atomically replaces `auth.json` with the selected profile;
+6. restores the selected profile's saved Codex state, or clears stale shared state for a new profile;
+7. records the active profile only after replacement succeeds;
+8. launches Codex normally;
+9. restores the previous authorization and Codex state if any critical step fails.
 
-The application does **not** switch the entire `.codex` directory. That is why Codex settings, chats, projects, and local history remain available after changing accounts.
+The application does **not** switch the entire `.codex` directory. It only switches known account-scoped state files and folders, so real workspace paths are not copied into profiles.
 
 ## Adding a profile
 
@@ -446,4 +447,3 @@ Distributed under the [MIT License](LICENSE).
 Codex Swap Account is an unofficial community project and is not affiliated with, endorsed by, or sponsored by OpenAI.
 
 OpenAI and Codex are trademarks of their respective owner. This project provides a local companion interface and does not modify the official Codex installation.
-
