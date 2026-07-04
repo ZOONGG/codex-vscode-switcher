@@ -41,4 +41,20 @@ public sealed class OverlaySettings
     public double SettingsWindowWidth { get; set; } = 1000;
 
     public double SettingsWindowHeight { get; set; } = 720;
+
+    public bool ShowAutomaticLimitIndicators { get; set; } = false;
+
+    public int GreenThresholdPercent { get; set; } = 60;
+
+    public int YellowThresholdPercent { get; set; } = 25;
+
+    public int StaleDataThresholdMinutes { get; set; } = 90;
+
+    public int LowWarningThresholdPercent { get; set; } = 20;
+
+    public bool ShowIndicatorsInOverlay { get; set; } = true;
+
+    public int ActiveProfileRefreshIntervalMinutes { get; set; } = 15;
+
+    public int InactiveProfileRefreshIntervalMinutes { get; set; } = 60;
 }

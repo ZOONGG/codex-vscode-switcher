@@ -27,6 +27,8 @@ internal sealed class OverlayWindow : Window
     private HwndSource? hwndSource;
     private IReadOnlyList<ProfileInfo> profiles = [];
     private string? activeProfile;
+    private string? recommendedProfile;
+    private ProfileStatusDocument? statusDocument;
     private IntPtr ownerHwnd;
     private bool isDragging;
     private bool isSwitching;
@@ -174,6 +176,13 @@ internal sealed class OverlayWindow : Window
     {
         profiles = newProfiles;
         activeProfile = newActiveProfile;
+        RebuildContent();
+    }
+
+    public void SetStatusDocument(ProfileStatusDocument document, string? recommendedProfileId)
+    {
+        statusDocument = document;
+        recommendedProfile = recommendedProfileId;
         RebuildContent();
     }
 
@@ -374,6 +383,22 @@ internal sealed class OverlayWindow : Window
             MaxWidth = 112,
         });
 
+        // Add limit indicator emoji if enabled
+        if (settings.ShowAutomaticLimitIndicators && statusDocument is not null && settings.ShowIndicatorsInOverlay)
+        {
+            string indicator = GetLimitIndicator(profile.Name);
+            if (!string.IsNullOrEmpty(indicator))
+            {
+                row.Children.Add(new TextBlock
+                {
+                    Text = indicator,
+                    FontSize = 14,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(4, 0, 0, 0),
+                });
+            }
+        }
+
         var content = new Grid();
         if (isActive)
         {
@@ -421,6 +446,48 @@ internal sealed class OverlayWindow : Window
         button.MouseEnter += (_, _) => AnimateBrush(button, isActive ? "TabActiveBrush" : "TabHoverBrush");
         button.MouseLeave += (_, _) => AnimateBrush(button, isActive ? "TabActiveBrush" : "TabBackgroundBrush");
         return button;
+    }
+
+    private string GetLimitIndicator(string profileId)
+    {
+        if (statusDocument?.Snapshots is null)
+        {
+            return string.Empty;
+        }
+
+        UsageSnapshot? snapshot = statusDocument.Snapshots.TryGetValue(profileId, out UsageSnapshot? snap) ? snap : null;
+        if (snapshot is null || snapshot.IsStale)
+        {
+            return string.Empty;
+        }
+
+        // Check if this is the recommended profile
+        if (profileId.Equals(recommendedProfile, StringComparison.OrdinalIgnoreCase))
+        {
+            return "⭐";
+        }
+
+        return GetAutomaticIndicator(snapshot);
+    }
+
+    private string GetAutomaticIndicator(UsageSnapshot snapshot)
+    {
+        if (snapshot.ShortWindowRemainingPercent is not int percent)
+        {
+            return string.Empty;
+        }
+
+        if (percent >= settings.GreenThresholdPercent)
+        {
+            return "🟢";
+        }
+
+        if (percent >= settings.YellowThresholdPercent)
+        {
+            return "🟡";
+        }
+
+        return "🔴";
     }
 
     private Button CreateMenuButton()

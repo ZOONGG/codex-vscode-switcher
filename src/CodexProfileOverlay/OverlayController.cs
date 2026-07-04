@@ -23,6 +23,8 @@ internal sealed class OverlayController : IDisposable
     private readonly OverlayVisibilityState visibilityState = new();
     private readonly CancellationTokenSource disposalTokenSource = new();
     private readonly Dictionary<string, ProfileLoginAttempt> activeProfileLogins = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ProfileStatusStore statusStore;
+    private readonly ProfileStatusService statusService;
     private OverlaySettings settings;
     private Localizer localizer;
     private TrayIconService? trayIcon;
@@ -59,6 +61,8 @@ internal sealed class OverlayController : IDisposable
         windowFinder = new CodexWindowFinder(logger);
         timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         timer.Tick += (_, _) => Tick();
+        statusStore = new ProfileStatusStore(paths.ProfileStatusFile);
+        statusService = new ProfileStatusService(statusStore, new UnavailableUsageProvider(), logger);
     }
 
     public void Start()
@@ -235,6 +239,15 @@ internal sealed class OverlayController : IDisposable
             settingsWindow?.UpdateProfiles(profiles);
             settingsWindow?.SetConflicts(RegisterHotkeys());
             profileManagerWindow?.UpdateProfiles(profiles, activeProfile);
+
+            // Update status indicators
+            var statusDocument = statusService.Load();
+            string? recommendedProfile = statusService.FindRecommendedProfile(
+                profiles.Select(p => p.Name).ToArray(),
+                statusDocument,
+                settings.GreenThresholdPercent,
+                settings.YellowThresholdPercent);
+            overlayWindow?.SetStatusDocument(statusDocument, recommendedProfile);
         }
         catch (Exception exception)
         {

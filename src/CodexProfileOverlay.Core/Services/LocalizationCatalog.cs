@@ -122,6 +122,38 @@ public static class LocalizationCatalog
         ["Auto"] = "Auto",
         ["Compact"] = "Compact",
         ["Expanded"] = "Expanded",
+
+        // Status and limits localization
+        ["StatusAndLimits"] = "Status and limits",
+        ["ShowAutomaticLimitIndicators"] = "Show automatic limit indicators",
+        ["ShowAutomaticLimitIndicatorsHelp"] = "Checks available Codex limits and displays a small status emoji beside each profile.",
+        ["ShowIndicatorsInOverlay"] = "Show indicators in overlay",
+        ["ShowIndicatorsInOverlayHelp"] = "Displays limit indicators in the expanded overlay profile buttons.",
+        ["GreenThreshold"] = "Green threshold (%)",
+        ["YellowThreshold"] = "Yellow threshold (%)",
+        ["StaleDataThreshold"] = "Stale data threshold (minutes)",
+        ["LowWarningThreshold"] = "Low warning threshold (%)",
+        ["ActiveProfileRefreshInterval"] = "Active profile refresh interval (minutes)",
+        ["InactiveProfileRefreshInterval"] = "Inactive profile refresh interval (minutes)",
+
+        // Legend
+        ["RecommendedProfile"] = "Recommended profile",
+        ["RecommendedProfileHelp"] = "It currently has the highest available capacity among checked profiles.",
+        ["HighCapacity"] = "High capacity",
+        ["HighCapacityHelp"] = "The profile has plenty of remaining usage.",
+        ["MediumCapacity"] = "Medium capacity",
+        ["MediumCapacityHelp"] = "A noticeable part of the limit has already been used.",
+        ["LowCapacity"] = "Low or exhausted",
+        ["LowCapacityHelp"] = "Choose another profile or wait for the limit to reset.",
+
+        // Manual status presets
+        ["PresetReady"] = "Ready",
+        ["PresetPartlyUsed"] = "Partly used",
+        ["PresetLow"] = "Low",
+        ["PresetExhausted"] = "Exhausted",
+        ["PresetResetsSoon"] = "Resets soon",
+        ["PresetInactive"] = "Inactive",
+        ["PresetUnknown"] = "Unknown",
     };
 
     private static readonly IReadOnlyDictionary<string, string> Russian = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -241,6 +273,38 @@ public static class LocalizationCatalog
         ["Auto"] = "Авто",
         ["Compact"] = "Компактный",
         ["Expanded"] = "Развернутый",
+
+        // Status and limits localization
+        ["StatusAndLimits"] = "Статус и лимиты",
+        ["ShowAutomaticLimitIndicators"] = "Показывать автоматические индикаторы лимитов",
+        ["ShowAutomaticLimitIndicatorsHelp"] = "Проверяет доступные лимиты Codex и показывает небольшой эмодзи рядом с каждым профилем.",
+        ["ShowIndicatorsInOverlay"] = "Показывать индикаторы в оверлее",
+        ["ShowIndicatorsInOverlayHelp"] = "Отображает индикаторы лимита на кнопках профилей в развёрнутом оверлее.",
+        ["GreenThreshold"] = "Порог зелёного (%)",
+        ["YellowThreshold"] = "Порог жёлтого (%)",
+        ["StaleDataThreshold"] = "Порог устаревших данных (минуты)",
+        ["LowWarningThreshold"] = "Порог низкого предупреждения (%)",
+        ["ActiveProfileRefreshInterval"] = "Интервал обновления активного профиля (минуты)",
+        ["InactiveProfileRefreshInterval"] = "Интервал обновления неактивных профилей (минуты)",
+
+        // Legend
+        ["RecommendedProfile"] = "Рекомендуемый профиль",
+        ["RecommendedProfileHelp"] = "Сейчас у него больше всего доступного лимита среди проверенных аккаунтов.",
+        ["HighCapacity"] = "Лимитов много",
+        ["HighCapacityHelp"] = "Можно спокойно продолжать работу.",
+        ["MediumCapacity"] = "Средний остаток",
+        ["MediumCapacityHelp"] = "Часть лимита уже использована.",
+        ["LowCapacity"] = "Лимит почти закончился",
+        ["LowCapacityHelp"] = "Лучше выбрать другой профиль или дождаться сброса.",
+
+        // Manual status presets
+        ["PresetReady"] = "Свежий",
+        ["PresetPartlyUsed"] = "Частично использован",
+        ["PresetLow"] = "Мало лимита",
+        ["PresetExhausted"] = "Лимит закончился",
+        ["PresetResetsSoon"] = "Скоро сброс",
+        ["PresetInactive"] = "Не использую",
+        ["PresetUnknown"] = "Неизвестно",
     };
 
     public static LanguagePreference Resolve(LanguagePreference preference, CultureInfo? culture = null)

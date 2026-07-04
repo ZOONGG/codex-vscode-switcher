@@ -17,6 +17,7 @@ public sealed class AppPaths
         LogDirectory = Path.Combine(ApplicationDataDirectory, "logs");
         RemovedProfilesDirectory = Path.Combine(ApplicationDataDirectory, "removed-profiles");
         PreflightBackupDirectory = Path.Combine(ApplicationDataDirectory, "preflight-backups");
+        ProfileStatusFile = Path.Combine(ApplicationDataDirectory, "profile-status.json");
     }
 
     public string UserProfile { get; }
@@ -44,6 +45,8 @@ public sealed class AppPaths
     public string RemovedProfilesDirectory { get; }
 
     public string PreflightBackupDirectory { get; }
+
+    public string ProfileStatusFile { get; }
 
     public static AppPaths FromEnvironment()
     {
