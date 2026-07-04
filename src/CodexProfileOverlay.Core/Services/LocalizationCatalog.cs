@@ -132,9 +132,13 @@ public static class LocalizationCatalog
         ["GreenThreshold"] = "Green threshold (%)",
         ["YellowThreshold"] = "Yellow threshold (%)",
         ["StaleDataThreshold"] = "Stale data threshold (minutes)",
+        ["StaleDataThresholdHelp"] = "Minutes of inactivity before usage data is considered stale.",
         ["LowWarningThreshold"] = "Low warning threshold (%)",
+        ["LowWarningThresholdHelp"] = "Percentage threshold for low limit warnings.",
         ["ActiveProfileRefreshInterval"] = "Active profile refresh interval (minutes)",
+        ["ActiveProfileRefreshIntervalHelp"] = "Minutes between automatic refreshes for the active profile.",
         ["InactiveProfileRefreshInterval"] = "Inactive profile refresh interval (minutes)",
+        ["InactiveProfileRefreshIntervalHelp"] = "Minutes between automatic refreshes for inactive profiles.",
 
         // Legend
         ["RecommendedProfile"] = "Recommended profile",
@@ -283,9 +287,13 @@ public static class LocalizationCatalog
         ["GreenThreshold"] = "Порог зелёного (%)",
         ["YellowThreshold"] = "Порог жёлтого (%)",
         ["StaleDataThreshold"] = "Порог устаревших данных (минуты)",
+        ["StaleDataThresholdHelp"] = "Минут до пометки данных как устаревших.",
         ["LowWarningThreshold"] = "Порог низкого предупреждения (%)",
+        ["LowWarningThresholdHelp"] = "Процент для низкого предупреждения о лимите.",
         ["ActiveProfileRefreshInterval"] = "Интервал обновления активного профиля (минуты)",
+        ["ActiveProfileRefreshIntervalHelp"] = "Минут между автоматическим обновлением активного профиля.",
         ["InactiveProfileRefreshInterval"] = "Интервал обновления неактивных профилей (минуты)",
+        ["InactiveProfileRefreshIntervalHelp"] = "Минут между автоматическим обновлением неактивных профилей.",
 
         // Legend
         ["RecommendedProfile"] = "Рекомендуемый профиль",

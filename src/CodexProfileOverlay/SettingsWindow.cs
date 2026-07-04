@@ -211,6 +211,7 @@ internal sealed class SettingsWindow : Window
             AddNav(SettingsPage.Profiles, localizer["Profiles"]);
             AddNav(SettingsPage.Hotkeys, localizer["Hotkeys"]);
             AddNav(SettingsPage.Language, localizer["Language"]);
+            AddNav(SettingsPage.Status, localizer["StatusAndLimits"]);
             AddNav(SettingsPage.Advanced, localizer["Advanced"]);
 
             pageTitle.Text = PageName(page);
@@ -224,6 +225,7 @@ internal sealed class SettingsWindow : Window
                 SettingsPage.Profiles => BuildProfilesPage(),
                 SettingsPage.Hotkeys => BuildHotkeysPage(),
                 SettingsPage.Language => BuildLanguagePage(),
+                SettingsPage.Status => BuildStatusPage(),
                 SettingsPage.Advanced => BuildAdvancedPage(),
                 _ => BuildGeneralPage(),
             });
@@ -419,6 +421,76 @@ internal sealed class SettingsWindow : Window
             Save();
             localizer.SetLanguage(value);
         })));
+        return stack;
+    }
+
+    private UIElement BuildStatusPage()
+    {
+        var stack = PageStack();
+        var rows = new List<UIElement>
+        {
+            SettingCheck(localizer["ShowAutomaticLimitIndicators"], localizer["ShowAutomaticLimitIndicatorsHelp"], settings.ShowAutomaticLimitIndicators, value => settings.ShowAutomaticLimitIndicators = value),
+            SettingCheck(localizer["ShowIndicatorsInOverlay"], localizer["ShowIndicatorsInOverlayHelp"], settings.ShowIndicatorsInOverlay, value => settings.ShowIndicatorsInOverlay = value),
+            NumberInput(localizer["GreenThreshold"], localizer["HighCapacityHelp"], settings.GreenThresholdPercent, value => settings.GreenThresholdPercent = (int)value, 1, 10, 100),
+            NumberInput(localizer["YellowThreshold"], localizer["MediumCapacityHelp"], settings.YellowThresholdPercent, value => settings.YellowThresholdPercent = (int)value, 1, 5, 90),
+            NumberInput(localizer["StaleDataThreshold"], localizer["StaleDataThresholdHelp"], settings.StaleDataThresholdMinutes, value => settings.StaleDataThresholdMinutes = (int)value, 1, 5, 1440),
+            NumberInput(localizer["LowWarningThreshold"], localizer["LowWarningThresholdHelp"], settings.LowWarningThresholdPercent, value => settings.LowWarningThresholdPercent = (int)value, 1, 5, 50),
+            NumberInput(localizer["ActiveProfileRefreshInterval"], localizer["ActiveProfileRefreshIntervalHelp"], settings.ActiveProfileRefreshIntervalMinutes, value => settings.ActiveProfileRefreshIntervalMinutes = (int)value, 1, 10, 120),
+            NumberInput(localizer["InactiveProfileRefreshInterval"], localizer["InactiveProfileRefreshIntervalHelp"], settings.InactiveProfileRefreshIntervalMinutes, value => settings.InactiveProfileRefreshIntervalMinutes = (int)value, 1, 10, 1440),
+        };
+
+        // Add legend section
+        var legend = new StackPanel { Margin = new Thickness(0, 18, 0, 0) };
+        legend.Children.Add(new TextBlock
+        {
+            Text = localizer["RecommendedProfile"],
+            FontSize = 14,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Brush("StrongTextBrush"),
+            Margin = new Thickness(0, 0, 0, 6),
+        });
+        legend.Children.Add(new TextBlock
+        {
+            Text = "⭐ " + localizer["RecommendedProfileHelp"],
+            FontSize = 13,
+            Foreground = Brush("MutedTextBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 6),
+        });
+        legend.Children.Add(new TextBlock
+        {
+            Text = "🟢 " + localizer["HighCapacityHelp"],
+            FontSize = 13,
+            Foreground = Brush("MutedTextBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 6),
+        });
+        legend.Children.Add(new TextBlock
+        {
+            Text = "🟡 " + localizer["MediumCapacityHelp"],
+            FontSize = 13,
+            Foreground = Brush("MutedTextBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 6),
+        });
+        legend.Children.Add(new TextBlock
+        {
+            Text = "🔴 " + localizer["LowCapacityHelp"],
+            FontSize = 13,
+            Foreground = Brush("MutedTextBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        });
+        stack.Children.Add(Card(rows.ToArray()));
+        stack.Children.Add(new Border
+        {
+            Child = legend,
+            Background = Brush("Surface2Brush"),
+            BorderBrush = Brush("BorderBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(16),
+            Margin = new Thickness(0, 18, 0, 0),
+        });
         return stack;
     }
 
@@ -844,6 +916,7 @@ internal sealed class SettingsWindow : Window
         SettingsPage.Profiles => localizer["Profiles"],
         SettingsPage.Hotkeys => localizer["Hotkeys"],
         SettingsPage.Language => localizer["Language"],
+        SettingsPage.Status => localizer["StatusAndLimits"],
         SettingsPage.Advanced => localizer["Advanced"],
         _ => localizer["Settings"],
     };
@@ -982,6 +1055,7 @@ internal sealed class SettingsWindow : Window
         Profiles,
         Hotkeys,
         Language,
+        Status,
         Advanced,
     }
 
