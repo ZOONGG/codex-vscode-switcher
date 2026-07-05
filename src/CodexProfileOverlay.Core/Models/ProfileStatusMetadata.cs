@@ -14,7 +14,7 @@ public sealed class ProfileStatusMetadata
 
     public string? ManualColor { get; set; }
 
-    public bool AutomaticRefreshEnabled { get; set; }
+    public bool AutomaticRefreshEnabled { get; set; } = true;
 
     public DateTimeOffset? LastAutomaticSnapshot { get; set; }
 

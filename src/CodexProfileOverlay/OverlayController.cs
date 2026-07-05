@@ -23,6 +23,7 @@ internal sealed class OverlayController : IDisposable
     private readonly OverlayVisibilityState visibilityState = new();
     private readonly CancellationTokenSource disposalTokenSource = new();
     private readonly Dictionary<string, ProfileLoginAttempt> activeProfileLogins = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DateTimeOffset> lastUsageRefreshAttempts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ProfileStatusStore statusStore;
     private readonly ProfileStatusService statusService;
     private OverlaySettings settings;
@@ -35,6 +36,7 @@ internal sealed class OverlayController : IDisposable
     private IReadOnlyList<ProfileInfo> profiles = [];
     private CodexWindowInfo? attachedWindow;
     private bool switching;
+    private bool automaticUsageRefreshRunning;
 
     public OverlayController(
         AppPaths paths,
@@ -62,7 +64,7 @@ internal sealed class OverlayController : IDisposable
         timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(750) };
         timer.Tick += (_, _) => TickSafely();
         statusStore = new ProfileStatusStore(paths.ProfileStatusFile);
-        statusService = new ProfileStatusService(statusStore, new UnavailableUsageProvider(), logger);
+        statusService = new ProfileStatusService(statusStore, new CodexCliStatusUsageProvider(), logger);
         statusService.SetStaleThreshold(TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes));
         if (statusService.ProviderCapability != UsageProviderCapability.Supported && settings.ShowAutomaticLimitIndicators)
         {
@@ -217,6 +219,7 @@ internal sealed class OverlayController : IDisposable
     {
         try
         {
+            BeginAutomaticUsageRefreshIfDue();
             Tick();
         }
         catch (Exception exception)
@@ -747,7 +750,81 @@ internal sealed class OverlayController : IDisposable
 
         ProfileStatusDocument document = statusService.Load();
         await statusService.RefreshUsageAsync(profile.Name, profile.DirectoryPath, document, disposalTokenSource.Token).ConfigureAwait(true);
+        lastUsageRefreshAttempts[profile.Name] = DateTimeOffset.UtcNow;
         RefreshStatusIndicators();
+    }
+
+    private void BeginAutomaticUsageRefreshIfDue()
+    {
+        if (automaticUsageRefreshRunning
+            || switching
+            || profiles.Count == 0
+            || !UsageRefreshPolicy.AllowsAutomaticRefresh(settings, statusService.ProviderCapability))
+        {
+            return;
+        }
+
+        ProfileStatusDocument document = statusService.Load();
+        string? activeProfile = activeProfileStore.Read();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var dueProfiles = profiles
+            .Where(profile =>
+            {
+                ProfileStatusMetadata metadata = statusService.GetOrCreateStatus(document, profile.Name);
+                if (!metadata.AutomaticRefreshEnabled)
+                {
+                    return false;
+                }
+
+                TimeSpan interval = profile.Name.Equals(activeProfile, StringComparison.OrdinalIgnoreCase)
+                    ? TimeSpan.FromMinutes(settings.ActiveProfileRefreshIntervalMinutes)
+                    : TimeSpan.FromMinutes(settings.InactiveProfileRefreshIntervalMinutes);
+                DateTimeOffset lastAttempt = lastUsageRefreshAttempts.TryGetValue(profile.Name, out DateTimeOffset inMemoryAttempt)
+                    ? inMemoryAttempt
+                    : metadata.LastRefreshAttemptAt ?? DateTimeOffset.MinValue;
+                return now - lastAttempt >= interval;
+            })
+            .ToArray();
+
+        if (dueProfiles.Length == 0)
+        {
+            return;
+        }
+
+        automaticUsageRefreshRunning = true;
+        _ = RefreshDueProfilesAsync(dueProfiles);
+    }
+
+    private async Task RefreshDueProfilesAsync(IReadOnlyList<ProfileInfo> dueProfiles)
+    {
+        try
+        {
+            foreach (ProfileInfo profile in dueProfiles)
+            {
+                if (disposalTokenSource.IsCancellationRequested
+                    || switching
+                    || !UsageRefreshPolicy.AllowsAutomaticRefresh(settings, statusService.ProviderCapability))
+                {
+                    return;
+                }
+
+                ProfileStatusDocument document = statusService.Load();
+                await statusService.RefreshUsageAsync(profile.Name, profile.DirectoryPath, document, disposalTokenSource.Token).ConfigureAwait(true);
+                lastUsageRefreshAttempts[profile.Name] = DateTimeOffset.UtcNow;
+                RefreshStatusIndicators();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            logger.Error("Automatic usage refresh failed.", exception);
+        }
+        finally
+        {
+            automaticUsageRefreshRunning = false;
+        }
     }
 
     private void ResetPosition()

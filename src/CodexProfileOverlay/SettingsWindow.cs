@@ -619,6 +619,34 @@ internal sealed class SettingsWindow : Window
             providerSupported));
 
         var actions = new WrapPanel();
+        var testProvider = new Button { Content = localizer["TestProviderSupport"], IsEnabled = providerSupported, Margin = new Thickness(0, 0, 8, 0) };
+        testProvider.Click += async (_, _) =>
+        {
+            testProvider.IsEnabled = false;
+            try
+            {
+                bool supported = await statusService.TestProviderSupportAsync(selected.DirectoryPath, CancellationToken.None);
+                if (supported)
+                {
+                    settings.ShowAutomaticLimitIndicators = true;
+                    Save();
+                    await refreshUsage(selected.Name);
+                    statusText.Foreground = Brush("SuccessBrush");
+                    statusText.Text = localizer["ProviderAvailable"];
+                    Rebuild();
+                }
+                else
+                {
+                    statusText.Foreground = Brush("ErrorBrush");
+                    statusText.Text = localizer["AutomaticLimitsUnavailable"];
+                }
+            }
+            finally
+            {
+                testProvider.IsEnabled = providerSupported;
+            }
+        };
+        actions.Children.Add(testProvider);
         var refresh = new Button { Content = localizer["RefreshNow"], IsEnabled = providerSupported && settings.ShowAutomaticLimitIndicators, Margin = new Thickness(0, 0, 8, 0) };
         refresh.Click += async (_, _) =>
         {
@@ -776,6 +804,12 @@ internal sealed class SettingsWindow : Window
         {
             lines.Add($"{localizer["UsageSource"]}: {snapshot.Source}");
         }
+
+        if (!string.IsNullOrWhiteSpace(snapshot.CodexCliVersion))
+        {
+            lines.Add($"{localizer["CodexCliVersion"]}: {snapshot.CodexCliVersion}");
+        }
+
         if (UsageIntelligence.IsStale(snapshot, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes)))
         {
             lines.Add(localizer["UsageDataStale"]);
@@ -788,9 +822,14 @@ internal sealed class SettingsWindow : Window
             lines.Add($"{localizer["LastRefreshAttempt"]}: {UsageDisplayFormatter.FormatLocal(metadata.LastRefreshAttemptAt.Value)}");
         }
 
+        if (metadata?.LastAutomaticSnapshot is not null)
+        {
+            lines.Add($"{localizer["LastSuccessfulRefresh"]}: {UsageDisplayFormatter.FormatLocal(metadata.LastAutomaticSnapshot.Value)}");
+        }
+
         if (!string.IsNullOrWhiteSpace(metadata?.LastRefreshError))
         {
-            lines.Add($"{localizer["RefreshError"]}: {metadata.LastRefreshError}");
+            lines.Add($"{localizer["LastSafeError"]}: {metadata.LastRefreshError}");
         }
         return string.Join(Environment.NewLine, lines);
     }

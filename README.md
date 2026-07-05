@@ -240,7 +240,9 @@ The overlay can be positioned after the Codex menu, centered, aligned right, or 
 
 Settings → **Status and limits** provides optional local metadata for every profile: an emoji, a short label (24 characters), a note (120 characters), and an optional reset time. This data is saved in `%LOCALAPPDATA%\CodexProfileOverlay\profile-status.json`; it is never written to a profile directory or credential file. Manual labels and notes stay in Settings. A manual emoji can be enabled separately for the overlay and is off by default.
 
-The automatic provider interface is present, but automatic Codex account usage retrieval is currently **unavailable**. Codex CLI `0.142.5` exposes no supported machine-readable usage/limits command, and the official Codex documentation does not document a local usage API, IPC contract, or non-secret usage metadata file. The master toggle therefore stays disabled, no background usage process runs, and the overlay shows no fabricated emoji or zero value.
+The experimental automatic provider uses the official interactive Codex CLI `/status` command. For each saved profile it starts a hidden Windows ConPTY session with `CODEX_HOME` pointed at that profile directory, runs `codex --no-alt-screen`, sends `/status`, parses only recognized limit rows, and exits with `/quit`. Use **Test provider support** in Settings before enabling **Experimental automatic limit indicators**.
+
+Only these automatic fields are cached: limit window label, remaining percentage, reset timestamp, capture timestamp, Codex CLI version, and the sanitized source `codex-cli-status`. Raw terminal output, account email, session ID, model, permissions, directory, project path, and auth contents are discarded and are never written to logs or fixtures.
 
 When a supported provider becomes available, the overlay remains emoji-only:
 
@@ -250,7 +252,9 @@ When a supported provider becomes available, the overlay remains emoji-only:
 - 🔴 below the medium threshold or exhausted;
 - no emoji for unknown, disabled, unavailable, failed, or stale data.
 
-The effective capacity is the lowest remaining percentage across all reported windows. A recommendation requires at least two fresh comparable profiles, maximizes that lowest percentage, then uses average capacity and nearest reset as tie-breakers. An exact tie produces no recommendation. Unknown usage is never displayed as zero. Cached automatic snapshots are kept when the feature is disabled or a refresh fails.
+The effective capacity is the lowest remaining percentage across all reported windows. For example, 99% remaining in the 5-hour window plus 0% remaining in the weekly window is 🔴. A recommendation requires at least two fresh comparable profiles, maximizes that lowest percentage, then uses average capacity and nearest reset as tie-breakers. An exact tie produces no recommendation. Unknown usage is never displayed as zero. Cached automatic snapshots are kept when the feature is disabled or a refresh fails.
+
+When the master toggle is off, no background CLI sessions are started, no automatic emoji is displayed, and cached snapshots are preserved. **Refresh now** intentionally refreshes the selected profile, while the normal overlay shows only one small emoji beside the profile name. Detailed percentages and reset times are shown in Settings and in the indicator tooltip.
 
 ## System tray
 

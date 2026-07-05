@@ -6,7 +6,7 @@ namespace CodexProfileOverlay.Core.Services;
 public sealed class SafeLogger
 {
     private static readonly Regex SecretLikePattern = new(
-        @"(?i)(authorization\s*:\s*bearer\s+)[^\s]+|((?:access|refresh|id)[_-]?token[""'\s:=]+)[^""'\s,}]+|([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})",
+        @"(?i)(authorization\s*:\s*bearer\s+)[^\s]+|((?:access|refresh|id)[_-]?token[""'\s:=]+)[^""'\s,}]+|([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly string logFile;
@@ -54,7 +54,7 @@ public sealed class SafeLogger
                 return match.Groups[2].Value + "[redacted]";
             }
 
-            return "[redacted-email]";
+            return match.Groups[3].Success ? "[redacted-email]" : "[redacted-id]";
         });
     }
 }

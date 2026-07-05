@@ -555,6 +555,11 @@ internal sealed class OverlayWindow : Window
             lines.Add($"{Localizer?["UsageSource"] ?? "Source"}: {snapshot.Source}");
         }
 
+        if (!string.IsNullOrWhiteSpace(snapshot.CodexCliVersion))
+        {
+            lines.Add($"{Localizer?["CodexCliVersion"] ?? "Codex CLI version"}: {snapshot.CodexCliVersion}");
+        }
+
         if (UsageIntelligence.IsStale(snapshot, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes)))
         {
             lines.Add(Localizer?["UsageDataStale"] ?? "Usage data is stale");

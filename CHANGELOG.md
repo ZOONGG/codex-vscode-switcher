@@ -6,7 +6,9 @@
 - Added validated per-profile manual status editing in Settings; metadata remains separate from credentials.
 - Added an emoji-only overlay formatter and a deterministic recommendation algorithm for future real provider data.
 - Added schema migration, generalized usage windows, UTC/local-time handling, stale-cache preservation, timeout/cancellation, and notification deduplication primitives.
-- Added a provider capability gate. Automatic usage retrieval remains disabled because no supported Codex CLI or documented local source was found; no values are fabricated.
+- Added an experimental Codex CLI `/status` usage provider that runs hidden Windows ConPTY sessions per profile, parses 5-hour and weekly limit rows, and caches only sanitized normalized snapshots.
+- Added provider support testing, manual refresh, last successful refresh, last safe error, CLI version display, and full master-toggle behavior for automatic limit indicators.
+- Added privacy regression coverage for ANSI/terminal parsing, low-window selection, malformed output, stale cache, unavailable providers, timeouts, and redaction of email/session identifiers.
 - Fixed severe overlay overhead by reusing the attached window, skipping unchanged WPF placement work, containing tracking errors, and avoiding duplicate Codex launches.
 - Expanded English/Russian localization and regression coverage for settings, thresholds, recommendations, stale data, and unavailable-provider behavior.
 

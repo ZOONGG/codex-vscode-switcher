@@ -158,6 +158,34 @@ public sealed class ProfileStatusService : IDisposable
         }
     }
 
+    public async Task<bool> TestProviderSupportAsync(
+        string profileDirectory,
+        CancellationToken cancellationToken,
+        TimeSpan? timeout = null)
+    {
+        if (usageProvider.Capability != UsageProviderCapability.Supported)
+        {
+            return false;
+        }
+
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(timeout ?? TimeSpan.FromSeconds(15));
+        try
+        {
+            UsageSnapshot? snapshot = await usageProvider.GetUsageAsync(profileDirectory, timeoutSource.Token).ConfigureAwait(false);
+            return snapshot is not null && UsageIntelligence.EffectiveRemainingPercent(snapshot).HasValue;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (Exception exception)
+        {
+            logger.Error("Usage provider support test failed.", exception);
+            return false;
+        }
+    }
+
     public string? FindRecommendedProfile(IReadOnlyList<string> profileIds, ProfileStatusDocument document)
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;

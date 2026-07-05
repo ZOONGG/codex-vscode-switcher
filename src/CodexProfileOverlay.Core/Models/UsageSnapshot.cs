@@ -23,6 +23,8 @@ public sealed class UsageSnapshot
 
     public string? Source { get; set; }
 
+    public string? CodexCliVersion { get; set; }
+
     public int Confidence { get; set; } = 100;
 
     public bool IsStale { get; set; }
