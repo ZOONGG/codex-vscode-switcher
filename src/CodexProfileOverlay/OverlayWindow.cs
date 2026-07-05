@@ -524,17 +524,12 @@ internal sealed class OverlayWindow : Window
         return FirstTextElement(manual);
     }
 
-    private TextBlock CreateIndicator(string profileId, string indicator, Thickness margin)
+    private FrameworkElement CreateIndicator(string profileId, string indicator, Thickness margin)
     {
-        return new TextBlock
-        {
-            Text = indicator,
-            FontFamily = EmojiFont,
-            FontSize = 13,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = margin,
-            ToolTip = BuildUsageToolTip(profileId),
-        };
+        FrameworkElement icon = CreateIndicatorVisual(indicator, 13);
+        icon.Margin = margin;
+        icon.ToolTip = BuildUsageToolTip(profileId);
+        return icon;
     }
 
     private object? BuildUsageToolTip(string profileId)
@@ -687,16 +682,10 @@ internal sealed class OverlayWindow : Window
 
         if (!string.IsNullOrEmpty(indicator))
         {
-            var emoji = new TextBlock
-            {
-                Text = indicator,
-                FontFamily = EmojiFont,
-                FontSize = 13,
-                Margin = new Thickness(10, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            Grid.SetColumn(emoji, 2);
-            grid.Children.Add(emoji);
+            FrameworkElement icon = CreateIndicatorVisual(indicator, 13);
+            icon.Margin = new Thickness(10, 0, 0, 0);
+            Grid.SetColumn(icon, 2);
+            grid.Children.Add(icon);
         }
 
         return new Button
@@ -709,6 +698,57 @@ internal sealed class OverlayWindow : Window
             BorderThickness = new Thickness(0),
             Padding = new Thickness(8, 0, 8, 0),
             Cursor = Cursors.Hand,
+        };
+    }
+
+    private static FrameworkElement CreateIndicatorVisual(string indicator, double size)
+    {
+        if (indicator == "⭐")
+        {
+            return new Viewbox
+            {
+                Width = size,
+                Height = size,
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new System.Windows.Shapes.Path
+                {
+                    Data = Geometry.Parse("M 12 2 L 14.9 8.7 L 22 9.3 L 16.6 13.9 L 18.2 21 L 12 17.3 L 5.8 21 L 7.4 13.9 L 2 9.3 L 9.1 8.7 Z"),
+                    Fill = new SolidColorBrush(Color.FromRgb(255, 213, 74)),
+                    Stroke = new SolidColorBrush(Color.FromRgb(245, 178, 18)),
+                    StrokeThickness = 1.2,
+                    StrokeLineJoin = PenLineJoin.Round,
+                },
+            };
+        }
+
+        Color? color = indicator switch
+        {
+            "🟢" => Color.FromRgb(34, 197, 94),
+            "🟡" => Color.FromRgb(250, 204, 21),
+            "🔴" => Color.FromRgb(239, 68, 68),
+            _ => null,
+        };
+
+        if (color is not null)
+        {
+            return new Ellipse
+            {
+                Width = size,
+                Height = size,
+                Fill = new SolidColorBrush(color.Value),
+                Stroke = new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)),
+                StrokeThickness = 0.8,
+                VerticalAlignment = VerticalAlignment.Center,
+                SnapsToDevicePixels = true,
+            };
+        }
+
+        return new TextBlock
+        {
+            Text = indicator,
+            FontFamily = EmojiFont,
+            FontSize = size,
+            VerticalAlignment = VerticalAlignment.Center,
         };
     }
 

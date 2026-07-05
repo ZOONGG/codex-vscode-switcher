@@ -502,14 +502,10 @@ internal sealed class SettingsWindow : Window
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(26) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        row.Children.Add(new TextBlock
-        {
-            Text = emoji,
-            FontFamily = EmojiFont,
-            FontSize = 15,
-            VerticalAlignment = VerticalAlignment.Top,
-            TextAlignment = TextAlignment.Center,
-        });
+        FrameworkElement icon = CreateIndicatorVisual(emoji, 16);
+        icon.HorizontalAlignment = HorizontalAlignment.Center;
+        icon.VerticalAlignment = VerticalAlignment.Top;
+        row.Children.Add(icon);
 
         var text = new StackPanel();
         text.Children.Add(new TextBlock
@@ -659,20 +655,68 @@ internal sealed class SettingsWindow : Window
     private static UIElement EmojiLabel(string emoji, string label)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        panel.Children.Add(new TextBlock
-        {
-            Text = emoji,
-            FontFamily = EmojiFont,
-            FontSize = 15,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 6, 0),
-        });
+        FrameworkElement icon = CreateIndicatorVisual(emoji, 15);
+        icon.Margin = new Thickness(0, 0, 6, 0);
+        panel.Children.Add(icon);
         panel.Children.Add(new TextBlock
         {
             Text = label,
             VerticalAlignment = VerticalAlignment.Center,
         });
         return panel;
+    }
+
+    private static FrameworkElement CreateIndicatorVisual(string indicator, double size)
+    {
+        if (indicator == "⭐")
+        {
+            return new Viewbox
+            {
+                Width = size,
+                Height = size,
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new System.Windows.Shapes.Path
+                {
+                    Data = Geometry.Parse("M 12 2 L 14.9 8.7 L 22 9.3 L 16.6 13.9 L 18.2 21 L 12 17.3 L 5.8 21 L 7.4 13.9 L 2 9.3 L 9.1 8.7 Z"),
+                    Fill = new SolidColorBrush(Color.FromRgb(255, 213, 74)),
+                    Stroke = new SolidColorBrush(Color.FromRgb(245, 178, 18)),
+                    StrokeThickness = 1.2,
+                    StrokeLineJoin = PenLineJoin.Round,
+                },
+            };
+        }
+
+        Color? color = indicator switch
+        {
+            "🟢" => Color.FromRgb(34, 197, 94),
+            "🟡" => Color.FromRgb(250, 204, 21),
+            "🟠" => Color.FromRgb(249, 115, 22),
+            "🔴" => Color.FromRgb(239, 68, 68),
+            "⚪" => Color.FromRgb(229, 231, 235),
+            _ => null,
+        };
+
+        if (color is not null)
+        {
+            return new System.Windows.Shapes.Ellipse
+            {
+                Width = size,
+                Height = size,
+                Fill = new SolidColorBrush(color.Value),
+                Stroke = new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)),
+                StrokeThickness = 0.8,
+                VerticalAlignment = VerticalAlignment.Center,
+                SnapsToDevicePixels = true,
+            };
+        }
+
+        return new TextBlock
+        {
+            Text = indicator,
+            FontFamily = EmojiFont,
+            FontSize = size,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
     }
 
     private TextBox TextSetting(string name, string? value, int maximumLength, Action<string?> commit)
