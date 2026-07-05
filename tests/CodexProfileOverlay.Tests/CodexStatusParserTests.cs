@@ -71,7 +71,24 @@ public sealed class CodexStatusParserTests
             """);
 
         Assert.Equal(0, UsageIntelligence.EffectiveRemainingPercent(snapshot));
-        Assert.Equal("🔴", ProfileIndicatorFormatter.FormatAutomatic(snapshot, true, 60, 25, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(90), false));
+        Assert.Equal("🔴", ProfileIndicatorFormatter.FormatAutomatic(snapshot, true, 60, 25, snapshot.CapturedAt, TimeSpan.FromMinutes(90), false));
+    }
+
+    [Fact]
+    public void Parse_SupportsCodexDesktopCompactUsageMenuRows()
+    {
+        UsageSnapshot snapshot = Parse("""
+            Usage remaining 5%
+
+            5h        69%     9:58 PM
+            Weekly     5%     Jul 9
+            Upgrade to Pro
+            """);
+
+        Assert.Equal(2, snapshot.Windows.Count);
+        Assert.Equal(69, snapshot.Windows.Single(window => window.Name == "5h").RemainingPercent);
+        Assert.Equal(5, snapshot.Windows.Single(window => window.Name == "Weekly").RemainingPercent);
+        Assert.Equal("🔴", ProfileIndicatorFormatter.FormatAutomatic(snapshot, true, 60, 25, snapshot.CapturedAt, TimeSpan.FromMinutes(90), false));
     }
 
     [Fact]
@@ -104,6 +121,23 @@ public sealed class CodexStatusParserTests
             Omsk);
 
         Assert.Null(snapshot);
+    }
+
+    [Fact]
+    public void ParseAppServerRateLimits_UsesStableProtocolResponse()
+    {
+        UsageSnapshot? snapshot = CodexStatusParser.ParseAppServerRateLimits(
+            """
+            {"id":2,"result":{"rateLimits":{"primary":{"usedPercent":31,"windowDurationMins":300,"resetsAt":1783282686},"secondary":{"usedPercent":95,"windowDurationMins":10080,"resetsAt":1783584260},"rateLimitReachedType":null},"rateLimitsByLimitId":null}}
+            """,
+            new DateTimeOffset(2026, 7, 5, 10, 0, 0, TimeSpan.Zero),
+            "codex-cli 0.142.5");
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(69, snapshot.Windows.Single(window => window.Name == "5h").RemainingPercent);
+        Assert.Equal(5, snapshot.Windows.Single(window => window.Name == "Weekly").RemainingPercent);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1783584260), snapshot.Windows.Single(window => window.Name == "Weekly").ResetAt);
+        Assert.False(snapshot.IsExhausted);
     }
 
     [Fact]

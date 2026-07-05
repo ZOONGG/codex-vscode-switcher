@@ -4,7 +4,7 @@
 
 **A safe, local Windows account switcher for the Codex desktop app.**
 
-Switch between multiple Codex accounts from an overlay attached directly to the Codex window — with tray controls, global hotkeys, per-account chats/settings, multi-monitor support, and automatic rollback if a switch fails.
+Switch between multiple Codex accounts from an overlay attached directly to the Codex window — with tray controls, global hotkeys, shared chat history, multi-monitor support, and automatic rollback if a switch fails.
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white)](https://github.com/ZOONGG/codex-swap-account)
 [![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
@@ -40,9 +40,9 @@ Using several Codex accounts normally means repeatedly signing out, opening a br
 Codex Swap Account turns that into a one-click action:
 
 1. choose a profile in the overlay, tray menu, or with a hotkey;
-2. the app safely saves the current profile state;
+2. the app safely saves the current authorization;
 3. Codex restarts with the selected account;
-4. your real workspace folders stay shared, while Codex chats and session state follow the selected account.
+4. your real workspace folders and chat history remain shared across every account.
 
 The app runs quietly in the system tray and only shows the overlay when a verified Codex window is available.
 
@@ -51,7 +51,7 @@ The app runs quietly in the system tray and only shows the overlay when a verifi
 | | Feature |
 |---|---|
 | **Fast switching** | Switch accounts from the overlay, tray menu, or `Ctrl + Alt + 1…9`. |
-| **Per-account Codex state** | Switch chats, projects, session history, and local Codex databases with the selected account while keeping real workspace folders in place. |
+| **Shared Codex history** | Keep chats, projects, session history, and local Codex databases available from every account; only authorization changes. |
 | **Compact and expanded modes** | Use a minimal dropdown or a one-click segmented profile bar. |
 | **Safe transaction** | Back up the active authorization and automatically roll back if switching fails. |
 | **Multi-monitor ready** | The overlay follows Codex across monitors, window moves, resizes, and DPI changes. |
@@ -168,17 +168,17 @@ Codex normally stores local state under:
 %USERPROFILE%\.codex
 ```
 
-Codex Swap Account keeps the directory location stable, but switches the account-scoped Codex state inside it:
+Codex Swap Account keeps both the directory and local state stable for every profile:
 
 ```text
 %USERPROFILE%\.codex
-├── chats / sessions  ← switched per profile
-├── projects          ← switched per profile
+├── chats / sessions  ← shared by every profile
+├── projects          ← shared by every profile
 ├── settings
-├── history           ← switched per profile
+├── history           ← shared by every profile
 ├── caches
 ├── databases
-└── auth.json         ← switched per profile
+└── auth.json         ← the only switched file
 ```
 
 Saved account profiles are stored separately:
@@ -197,15 +197,15 @@ During a switch, the app:
 
 1. prevents concurrent switch operations;
 2. closes Codex gracefully;
-3. saves the freshly updated `auth.json` and Codex chat/session state back to the active profile;
-4. creates a backup of the current authorization and Codex state;
-5. atomically replaces `auth.json` with the selected profile;
-6. restores the selected profile's saved Codex state, or clears stale shared state for a new profile;
+3. on the first switch after upgrading, merges legacy per-profile sessions into shared history;
+4. saves the freshly updated `auth.json` back to the active profile;
+5. creates a backup of the current authorization;
+6. atomically replaces `auth.json` with the selected profile;
 7. records the active profile only after replacement succeeds;
 8. launches Codex normally;
-9. restores the previous authorization and Codex state if any critical step fails.
+9. restores the previous authorization if any critical step fails.
 
-The application does **not** switch the entire `.codex` directory. It only switches known account-scoped state files and folders, so real workspace paths are not copied into profiles.
+The application does **not** switch or copy the `.codex` directory on every account change. This makes restarts faster, avoids locked SQLite conflicts, and keeps every local chat available from every profile.
 
 ## Adding a profile
 
@@ -240,9 +240,9 @@ The overlay can be positioned after the Codex menu, centered, aligned right, or 
 
 Settings → **Status and limits** provides optional local metadata for every profile: an emoji, a short label (24 characters), a note (120 characters), and an optional reset time. This data is saved in `%LOCALAPPDATA%\CodexProfileOverlay\profile-status.json`; it is never written to a profile directory or credential file. Manual labels and notes stay in Settings. A manual emoji can be enabled separately for the overlay and is off by default.
 
-The experimental automatic provider uses the official interactive Codex CLI `/status` command. For each saved profile it starts a hidden Windows ConPTY session with `CODEX_HOME` pointed at that profile directory, runs `codex --no-alt-screen`, sends `/status`, parses only recognized limit rows, and exits with `/quit`. Use **Test provider support** in Settings before enabling **Experimental automatic limit indicators**.
+The automatic provider starts an isolated `codex app-server` with `CODEX_HOME` pointed at the selected profile and reads the structured `account/rateLimits/read` response. It no longer starts an interactive terminal or parses the rendered `/status` menu. **Test provider support** verifies this same data path immediately.
 
-Only these automatic fields are cached: limit window label, remaining percentage, reset timestamp, capture timestamp, Codex CLI version, and the sanitized source `codex-cli-status`. Raw terminal output, account email, session ID, model, permissions, directory, project path, and auth contents are discarded and are never written to logs or fixtures.
+Only these automatic fields are cached: limit window label, remaining percentage, reset timestamp, capture timestamp, Codex CLI version, and the sanitized source `codex-cli-status`. The raw response, account email, session ID, model, permissions, directory, project path, and auth contents are not persisted.
 
 When a supported provider becomes available, the overlay remains emoji-only:
 

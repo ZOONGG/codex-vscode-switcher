@@ -41,9 +41,14 @@ internal sealed class CodexProcessService
             await Task.Delay(250, cancellationToken).ConfigureAwait(false);
         }
 
-        if (!allowForceClose)
+        if (!FindCodexProcesses().Any())
         {
             return;
+        }
+
+        if (!allowForceClose)
+        {
+            throw new InvalidOperationException("Codex is still running, so the profile cannot be switched safely.");
         }
 
         foreach (Process process in FindCodexProcesses())
@@ -64,6 +69,17 @@ internal sealed class CodexProcessService
                 }
             }
         }
+
+        deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        while (DateTimeOffset.UtcNow < deadline && FindCodexProcesses().Any())
+        {
+            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (FindCodexProcesses().Any())
+        {
+            throw new InvalidOperationException("Codex processes did not exit after forced termination.");
+        }
     }
 
     public void LaunchCodex()
@@ -80,10 +96,11 @@ internal sealed class CodexProcessService
     {
         string fullProfileDirectory = Path.GetFullPath(profileDirectory);
         Directory.CreateDirectory(fullProfileDirectory);
+        string executable = CodexCliLocator.FindExecutable()
+            ?? throw new FileNotFoundException("codex executable was not found.");
         var startInfo = new ProcessStartInfo
         {
-            FileName = "cmd.exe",
-            Arguments = "/d /c codex login",
+            FileName = executable,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -91,6 +108,7 @@ internal sealed class CodexProcessService
             WindowStyle = ProcessWindowStyle.Hidden,
             WorkingDirectory = fullProfileDirectory,
         };
+        startInfo.ArgumentList.Add("login");
         startInfo.Environment["CODEX_HOME"] = fullProfileDirectory;
 
         using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start codex login.");

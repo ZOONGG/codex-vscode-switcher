@@ -1,32 +1,7 @@
-using CodexProfileOverlay.Core.Models;
-
 namespace CodexProfileOverlay.Core.Services;
 
 public sealed class AuthSwitchService
 {
-    private const string ProfileStateDirectoryName = "codex-state";
-
-    private static readonly string[] ManagedStateFiles =
-    [
-        ".codex-global-state.json",
-        ".codex-global-state.json.bak",
-        "session_index.jsonl",
-    ];
-
-    private static readonly string[] ManagedStateFilePatterns =
-    [
-        "state_*.sqlite*",
-        "goals_*.sqlite*",
-        "memories_*.sqlite*",
-    ];
-
-    private static readonly string[] ManagedStateDirectories =
-    [
-        "archived_sessions",
-        "attachments",
-        "sessions",
-    ];
-
     private readonly AppPaths paths;
     private readonly ProfileDiscoveryService profileDiscovery;
     private readonly ActiveProfileStore activeProfileStore;
@@ -53,7 +28,6 @@ public sealed class AuthSwitchService
         }
 
         string? backupPath = null;
-        string? stateBackupDirectory = null;
         string? previousProfile = null;
 
         try
@@ -69,7 +43,6 @@ public sealed class AuthSwitchService
             {
                 var currentProfile = profileDiscovery.GetRequiredProfile(previousProfile);
                 File.Copy(paths.SharedAuthFile, currentProfile.AuthFilePath, overwrite: true);
-                SaveSharedCodexState(currentProfile);
             }
 
             if (!File.Exists(targetProfile.AuthFilePath))
@@ -88,18 +61,14 @@ public sealed class AuthSwitchService
                 File.Copy(paths.SharedAuthFile, backupPath, overwrite: false);
             }
 
-            stateBackupDirectory = BackupSharedCodexStateIfPresent();
-
             try
             {
                 replacer.ReplaceFromSource(targetProfile.AuthFilePath, paths.SharedAuthFile);
-                InstallProfileCodexState(targetProfile);
                 activeProfileStore.Write(targetProfile.Name);
             }
             catch
             {
                 RestoreBackupIfPossible(backupPath);
-                RestoreStateBackupIfPossible(stateBackupDirectory);
                 throw;
             }
 
@@ -109,172 +78,6 @@ public sealed class AuthSwitchService
         {
             switchGate.Release();
         }
-    }
-
-    private void SaveSharedCodexState(ProfileInfo profile)
-    {
-        string profileStateDirectory = GetProfileStateDirectory(profile);
-        ReplaceProfileStateFromShared(profileStateDirectory);
-    }
-
-    private void InstallProfileCodexState(ProfileInfo profile)
-    {
-        string profileStateDirectory = GetProfileStateDirectory(profile);
-        ClearManagedState(paths.SharedCodexDirectory);
-
-        if (!Directory.Exists(profileStateDirectory) || !Directory.EnumerateFileSystemEntries(profileStateDirectory).Any())
-        {
-            return;
-        }
-
-        CopyDirectoryContents(profileStateDirectory, paths.SharedCodexDirectory);
-    }
-
-    private string? BackupSharedCodexStateIfPresent()
-    {
-        if (!Directory.Exists(paths.SharedCodexDirectory) || !EnumerateManagedStateItems(paths.SharedCodexDirectory).Any())
-        {
-            return null;
-        }
-
-        Directory.CreateDirectory(paths.BackupDirectory);
-        string backupDirectory = Path.Combine(
-            paths.BackupDirectory,
-            $"state-{DateTimeOffset.Now:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}");
-        ReplaceProfileStateFromShared(backupDirectory);
-        return backupDirectory;
-    }
-
-    private void RestoreStateBackupIfPossible(string? backupDirectory)
-    {
-        ClearManagedState(paths.SharedCodexDirectory);
-        if (backupDirectory is null || !Directory.Exists(backupDirectory))
-        {
-            return;
-        }
-
-        CopyDirectoryContents(backupDirectory, paths.SharedCodexDirectory);
-    }
-
-    private void ReplaceProfileStateFromShared(string destinationDirectory)
-    {
-        if (Directory.Exists(destinationDirectory))
-        {
-            Directory.Delete(destinationDirectory, recursive: true);
-        }
-
-        if (!Directory.Exists(paths.SharedCodexDirectory))
-        {
-            return;
-        }
-
-        var stateItems = EnumerateManagedStateItems(paths.SharedCodexDirectory).ToArray();
-        if (stateItems.Length == 0)
-        {
-            return;
-        }
-
-        Directory.CreateDirectory(destinationDirectory);
-        foreach (string sourcePath in stateItems)
-        {
-            string destinationPath = Path.Combine(destinationDirectory, Path.GetFileName(sourcePath));
-            if (Directory.Exists(sourcePath))
-            {
-                CopyDirectory(sourcePath, destinationPath);
-            }
-            else
-            {
-                File.Copy(sourcePath, destinationPath, overwrite: true);
-            }
-        }
-    }
-
-    private void ClearManagedState(string rootDirectory)
-    {
-        if (!Directory.Exists(rootDirectory))
-        {
-            return;
-        }
-
-        foreach (string path in EnumerateManagedStateItems(rootDirectory).OrderByDescending(static path => path.Length))
-        {
-            if (Directory.Exists(path))
-            {
-                Directory.Delete(path, recursive: true);
-            }
-            else if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-    }
-
-    private static IEnumerable<string> EnumerateManagedStateItems(string rootDirectory)
-    {
-        foreach (string fileName in ManagedStateFiles)
-        {
-            string path = Path.Combine(rootDirectory, fileName);
-            if (File.Exists(path))
-            {
-                yield return path;
-            }
-        }
-
-        foreach (string pattern in ManagedStateFilePatterns)
-        {
-            foreach (string path in Directory.EnumerateFiles(rootDirectory, pattern, SearchOption.TopDirectoryOnly))
-            {
-                yield return path;
-            }
-        }
-
-        foreach (string directoryName in ManagedStateDirectories)
-        {
-            string path = Path.Combine(rootDirectory, directoryName);
-            if (Directory.Exists(path))
-            {
-                yield return path;
-            }
-        }
-    }
-
-    private static void CopyDirectoryContents(string sourceDirectory, string destinationDirectory)
-    {
-        Directory.CreateDirectory(destinationDirectory);
-        foreach (string sourcePath in Directory.EnumerateFileSystemEntries(sourceDirectory))
-        {
-            string destinationPath = Path.Combine(destinationDirectory, Path.GetFileName(sourcePath));
-            if (Directory.Exists(sourcePath))
-            {
-                CopyDirectory(sourcePath, destinationPath);
-            }
-            else
-            {
-                File.Copy(sourcePath, destinationPath, overwrite: true);
-            }
-        }
-    }
-
-    private static void CopyDirectory(string sourceDirectory, string destinationDirectory)
-    {
-        Directory.CreateDirectory(destinationDirectory);
-        foreach (string sourcePath in Directory.EnumerateFileSystemEntries(sourceDirectory))
-        {
-            string destinationPath = Path.Combine(destinationDirectory, Path.GetFileName(sourcePath));
-            if (Directory.Exists(sourcePath))
-            {
-                CopyDirectory(sourcePath, destinationPath);
-            }
-            else
-            {
-                File.Copy(sourcePath, destinationPath, overwrite: true);
-            }
-        }
-    }
-
-    private static string GetProfileStateDirectory(ProfileInfo profile)
-    {
-        return Path.Combine(profile.DirectoryPath, ProfileStateDirectoryName);
     }
 
     private void RestoreBackupIfPossible(string? backupPath)

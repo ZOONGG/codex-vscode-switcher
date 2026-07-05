@@ -5,6 +5,8 @@ namespace CodexProfileOverlay.Core.Services;
 
 public sealed class ProfileStatusStore
 {
+    private const int CurrentSchemaVersion = 3;
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         WriteIndented = true,
@@ -83,13 +85,19 @@ public sealed class ProfileStatusStore
     private static ProfileStatusDocument Normalize(ProfileStatusDocument? document)
     {
         document ??= new ProfileStatusDocument();
-        document.SchemaVersion = 2;
+        bool enableAutomaticRefreshForLegacyProfiles = document.SchemaVersion < CurrentSchemaVersion;
+        document.SchemaVersion = CurrentSchemaVersion;
         document.Profiles ??= [];
         document.Snapshots ??= new Dictionary<string, UsageSnapshot>(StringComparer.OrdinalIgnoreCase);
         document.Snapshots = new Dictionary<string, UsageSnapshot>(document.Snapshots, StringComparer.OrdinalIgnoreCase);
 
         foreach (ProfileStatusMetadata status in document.Profiles)
         {
+            if (enableAutomaticRefreshForLegacyProfiles)
+            {
+                status.AutomaticRefreshEnabled = true;
+            }
+
             status.ProfileId = status.ProfileId.Trim();
             status.ManualResetAt = status.ManualResetAt?.ToUniversalTime();
             status.LastAutomaticSnapshot = status.LastAutomaticSnapshot?.ToUniversalTime();

@@ -125,7 +125,7 @@ public static class LocalizationCatalog
 
         // Status and limits localization
         ["StatusAndLimits"] = "Status and limits",
-        ["ShowAutomaticLimitIndicators"] = "Experimental automatic limit indicators",
+        ["ShowAutomaticLimitIndicators"] = "Automatic limit indicators",
         ["ShowAutomaticLimitIndicatorsHelp"] = "Checks available Codex limits and displays a small status emoji beside each profile.",
         ["ShowIndicatorsInOverlay"] = "Show indicators in overlay",
         ["ShowIndicatorsInOverlayHelp"] = "Displays limit indicators in the overlay profile buttons and compact profile list.",
@@ -146,7 +146,7 @@ public static class LocalizationCatalog
         ["WarnNearlyExhausted"] = "Warn when a profile is nearly exhausted",
         ["WarnNearlyExhaustedHelp"] = "Shows one deduplicated local notification when a supported source reports low capacity.",
         ["AutomaticLimitsUnavailable"] = "Automatic limits unavailable",
-        ["AutomaticLimitsUnavailableHelp"] = "Automatic checks require a supported Codex CLI /status provider. Use the support test before enabling background checks.",
+        ["AutomaticLimitsUnavailableHelp"] = "Automatic checks require a Codex CLI with app-server rate-limit support. Use the support test before enabling background checks.",
         ["IndicatorLegend"] = "Indicator legend",
         ["AutomaticIndicatorExplanation"] = "The indicator uses the most restrictive available window. Values may be delayed; no emoji means reliable current data is unavailable. ⭐ is a recommendation, not a guarantee. Disabling automatic indicators removes every automatic emoji.",
         ["ManualProfileStatus"] = "Manual profile status",
@@ -318,7 +318,7 @@ public static class LocalizationCatalog
 
         // Status and limits localization
         ["StatusAndLimits"] = "Статус и лимиты",
-        ["ShowAutomaticLimitIndicators"] = "Экспериментальные автоматические индикаторы лимитов",
+        ["ShowAutomaticLimitIndicators"] = "Автоматические индикаторы лимитов",
         ["ShowAutomaticLimitIndicatorsHelp"] = "Проверяет доступные лимиты Codex и показывает небольшой эмодзи рядом с каждым профилем.",
         ["ShowIndicatorsInOverlay"] = "Показывать индикаторы в оверлее",
         ["ShowIndicatorsInOverlayHelp"] = "Отображает индикаторы лимита на кнопках профилей в оверлее и в компактном списке.",
@@ -339,7 +339,7 @@ public static class LocalizationCatalog
         ["WarnNearlyExhausted"] = "Предупреждать, когда лимит почти закончился",
         ["WarnNearlyExhaustedHelp"] = "Показывает одно локальное уведомление, когда поддерживаемый источник сообщает о низком остатке.",
         ["AutomaticLimitsUnavailable"] = "Автоматические лимиты недоступны",
-        ["AutomaticLimitsUnavailableHelp"] = "Для автоматической проверки нужен поддерживаемый провайдер Codex CLI /status. Перед включением фоновых проверок используйте проверку поддержки.",
+        ["AutomaticLimitsUnavailableHelp"] = "Для автоматической проверки нужен Codex CLI с поддержкой лимитов app-server. Перед включением фоновых проверок используйте проверку поддержки.",
         ["IndicatorLegend"] = "Обозначения индикаторов",
         ["AutomaticIndicatorExplanation"] = "Индикатор основан на самом строгом доступном окне лимита. Данные могут запаздывать; отсутствие эмодзи означает, что надёжных актуальных данных нет. ⭐ — рекомендация, а не гарантия. Отключение функции убирает все автоматические эмодзи.",
         ["ManualProfileStatus"] = "Ручной статус профиля",

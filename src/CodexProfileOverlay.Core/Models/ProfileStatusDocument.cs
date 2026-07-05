@@ -2,7 +2,7 @@ namespace CodexProfileOverlay.Core.Models;
 
 public sealed class ProfileStatusDocument
 {
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     public List<ProfileStatusMetadata> Profiles { get; set; } = [];
 

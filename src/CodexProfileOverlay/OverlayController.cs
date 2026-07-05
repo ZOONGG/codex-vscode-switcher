@@ -26,6 +26,7 @@ internal sealed class OverlayController : IDisposable
     private readonly Dictionary<string, DateTimeOffset> lastUsageRefreshAttempts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ProfileStatusStore statusStore;
     private readonly ProfileStatusService statusService;
+    private readonly SharedCodexStateMigrationService stateMigrationService;
     private OverlaySettings settings;
     private Localizer localizer;
     private TrayIconService? trayIcon;
@@ -65,6 +66,7 @@ internal sealed class OverlayController : IDisposable
         timer.Tick += (_, _) => TickSafely();
         statusStore = new ProfileStatusStore(paths.ProfileStatusFile);
         statusService = new ProfileStatusService(statusStore, new CodexCliStatusUsageProvider(), logger);
+        stateMigrationService = new SharedCodexStateMigrationService(paths);
         statusService.SetStaleThreshold(TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes));
         if (statusService.ProviderCapability != UsageProviderCapability.Supported && settings.ShowAutomaticLimitIndicators)
         {
@@ -319,6 +321,7 @@ internal sealed class OverlayController : IDisposable
 
             bool allowForceClose = settings.ForceCloseFallback;
             await processService.CloseCodexAsync(settings.GracefulCloseTimeoutSeconds, allowForceClose, disposalTokenSource.Token).ConfigureAwait(true);
+            MigrateLegacyProfileStateSafely();
             await switchService.SwitchAsync(profileName, disposalTokenSource.Token).ConfigureAwait(true);
             RefreshProfiles();
             if (settings.LaunchCodexAfterSwitching)
@@ -346,6 +349,22 @@ internal sealed class OverlayController : IDisposable
 
             _ = RegisterHotkeys();
             Tick();
+        }
+    }
+
+    private void MigrateLegacyProfileStateSafely()
+    {
+        try
+        {
+            SharedCodexStateMigrationResult result = stateMigrationService.MigrateLegacyProfileState();
+            if (!result.WasAlreadyCompleted)
+            {
+                logger.Info($"Merged legacy profile state into shared Codex storage: {result.CopiedFileCount} files, {result.ImportedDatabaseRowCount} database rows from {result.LegacyProfileCount} profiles.");
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            logger.Error("Could not merge legacy profile state into shared Codex storage.", exception);
         }
     }
 
@@ -779,6 +798,11 @@ internal sealed class OverlayController : IDisposable
                 TimeSpan interval = profile.Name.Equals(activeProfile, StringComparison.OrdinalIgnoreCase)
                     ? TimeSpan.FromMinutes(settings.ActiveProfileRefreshIntervalMinutes)
                     : TimeSpan.FromMinutes(settings.InactiveProfileRefreshIntervalMinutes);
+                if (!string.IsNullOrWhiteSpace(metadata.LastRefreshError))
+                {
+                    interval = TimeSpan.FromMinutes(1);
+                }
+
                 DateTimeOffset lastAttempt = lastUsageRefreshAttempts.TryGetValue(profile.Name, out DateTimeOffset inMemoryAttempt)
                     ? inMemoryAttempt
                     : metadata.LastRefreshAttemptAt ?? DateTimeOffset.MinValue;

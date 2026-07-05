@@ -41,8 +41,34 @@ public sealed class ProfileStatusStoreTests
         Assert.Equal("Ready", loaded.Profiles[0].ManualLabel);
         Assert.Equal("Test note", loaded.Profiles[0].ManualNote);
         Assert.Single(loaded.Snapshots);
-        Assert.Equal(2, loaded.SchemaVersion);
+        Assert.Equal(3, loaded.SchemaVersion);
         Assert.Equal(75, loaded.Snapshots["work"].Windows[0].RemainingPercent);
+    }
+
+    [Fact]
+    public void Load_VersionTwoEnablesAutomaticRefreshOnceAndPreservesLaterOptOut()
+    {
+        using var temp = new TempDirectory();
+        string statusFile = Path.Combine(temp.Path, "profile-status.json");
+        File.WriteAllText(statusFile, """
+            {
+              "schemaVersion": 2,
+              "profiles": [
+                { "profileId": "work", "automaticRefreshEnabled": false }
+              ],
+              "snapshots": {}
+            }
+            """);
+        var store = new ProfileStatusStore(statusFile);
+
+        ProfileStatusDocument migrated = store.Load();
+        Assert.Equal(3, migrated.SchemaVersion);
+        Assert.True(migrated.Profiles.Single().AutomaticRefreshEnabled);
+
+        migrated.Profiles.Single().AutomaticRefreshEnabled = false;
+        store.Save(migrated);
+
+        Assert.False(store.Load().Profiles.Single().AutomaticRefreshEnabled);
     }
 
     [Fact]

@@ -6,7 +6,11 @@
 - Added validated per-profile manual status editing in Settings; metadata remains separate from credentials.
 - Added an emoji-only overlay formatter and a deterministic recommendation algorithm for future real provider data.
 - Added schema migration, generalized usage windows, UTC/local-time handling, stale-cache preservation, timeout/cancellation, and notification deduplication primitives.
-- Added an experimental Codex CLI `/status` usage provider that runs hidden Windows ConPTY sessions per profile, parses 5-hour and weekly limit rows, and caches only sanitized normalized snapshots.
+- Replaced the fragile interactive `/status` capture with profile-isolated `codex app-server` requests to `account/rateLimits/read`.
+- Kept chats, sessions, and local Codex databases shared across account profiles; only `auth.json` changes during a switch.
+- Added a one-time migration that merges legacy per-profile session files and thread database rows into the shared Codex state.
+- Wait for every Codex process to exit after forced termination before replacing authorization, preventing restart races and locked database errors.
+- Fixed build, test, and publish scripts to prefer the repository-local .NET SDK when the system installation contains only a runtime.
 - Added provider support testing, manual refresh, last successful refresh, last safe error, CLI version display, and full master-toggle behavior for automatic limit indicators.
 - Added privacy regression coverage for ANSI/terminal parsing, low-window selection, malformed output, stale cache, unavailable providers, timeouts, and redaction of email/session identifiers.
 - Fixed severe overlay overhead by reusing the attached window, skipping unchanged WPF placement work, containing tracking errors, and avoiding duplicate Codex launches.

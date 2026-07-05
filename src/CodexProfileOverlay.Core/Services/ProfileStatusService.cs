@@ -118,7 +118,7 @@ public sealed class ProfileStatusService : IDisposable
             }
 
             using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutSource.CancelAfter(timeout ?? TimeSpan.FromSeconds(15));
+            timeoutSource.CancelAfter(timeout ?? TimeSpan.FromSeconds(30));
             try
             {
                 UsageSnapshot? snapshot = await usageProvider.GetUsageAsync(profileDirectory, timeoutSource.Token).ConfigureAwait(false);
@@ -169,7 +169,7 @@ public sealed class ProfileStatusService : IDisposable
         }
 
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(timeout ?? TimeSpan.FromSeconds(15));
+        timeoutSource.CancelAfter(timeout ?? TimeSpan.FromSeconds(30));
         try
         {
             UsageSnapshot? snapshot = await usageProvider.GetUsageAsync(profileDirectory, timeoutSource.Token).ConfigureAwait(false);

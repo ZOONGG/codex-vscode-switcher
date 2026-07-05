@@ -5,12 +5,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $MyInvocation.MyCommand.Path
-$dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
-if (-not $dotnet) {
-    $localDotnet = Join-Path $repo ".dotnet\dotnet.exe"
-    if (Test-Path -LiteralPath $localDotnet) {
-        $dotnet = [pscustomobject]@{ Source = $localDotnet }
-    }
+$localDotnet = Join-Path $repo ".dotnet\dotnet.exe"
+if (Test-Path -LiteralPath $localDotnet) {
+    $dotnet = [pscustomobject]@{ Source = $localDotnet }
+} else {
+    $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
 }
 
 if (-not $dotnet) {

@@ -5,7 +5,7 @@ Codex Profile Overlay has two assemblies:
 - `CodexProfileOverlay.Core`: token-safe services and models that can be unit-tested without WPF.
 - `CodexProfileOverlay`: WPF shell, tray lifecycle, window attachment, hotkeys, settings/profile windows, and Codex process launching.
 
-The switcher keeps the real workspace folders shared, but account-scoped Codex state is stored per profile. During a switch it saves `%USERPROFILE%\.codex\auth.json` plus the known Codex chat/session index files into `%USERPROFILE%\.codex-profiles\<profile>`, then restores the selected profile's saved state. Non-secret UI metadata lives under `%LOCALAPPDATA%\CodexProfileOverlay`.
+The switcher keeps `%USERPROFILE%\.codex` as one shared Codex state directory for every profile. During a switch it saves the current `auth.json` into `%USERPROFILE%\.codex-profiles\<profile>`, atomically installs the selected profile's `auth.json`, and leaves chats, sessions, projects, and local databases in place. A one-time migration merges legacy per-profile session files and thread rows back into the shared store. Non-secret UI metadata lives under `%LOCALAPPDATA%\CodexProfileOverlay`.
 
 Normal Codex launches do not set `CODEX_HOME`. The add-profile login flow sets `CODEX_HOME` only for that isolated `codex login` process.
 
@@ -15,17 +15,17 @@ The status feature allows users to track which Codex profiles have usable limits
 
 - `ProfileStatusMetadata`: Stored per-profile user metadata (manual emoji, labels, notes, reset times). Saved to `profile-status.json`, never mixed with credentials.
 - `UsageSnapshot`: Automatic usage data from a provider. `UsageLimitWindow` preserves provider window names, optional durations, remaining percentages, and reset timestamps instead of assuming fixed 5-hour/7-day windows.
-- `IUsageProvider`: Abstraction for retrieving usage data. Returns `Supported` or `Unavailable` capability. Currently only `UnavailableUsageProvider` is implemented since Codex CLI does not expose a supported endpoint for usage data.
+- `IUsageProvider`: Abstraction for retrieving usage data. Returns `Supported` or `Unavailable` capability. `CodexCliStatusUsageProvider` reads normalized account limits from a profile-isolated Codex app-server process.
 - `ProfileStatusService`: Validates manual metadata, serializes provider calls with cancellation/timeouts, preserves successful cache entries on failure, and calculates recommendations.
 - `UsageIntelligence` and `ProfileIndicatorFormatter`: Pure, tested capacity and emoji formatting rules used by the WPF shell.
 
 The status document is schema-versioned and normalized on load. Timestamps are persisted as UTC and formatted in local time. Legacy short/long snapshot fields remain readable for backward compatibility. Manual metadata and automatic snapshots are independent, so refreshes cannot overwrite user notes.
 
-### Provider investigation
+### Automatic provider
 
-The installed `codex-cli 0.142.5` was checked through its public `--help` command tree. It contains no supported usage or limits command. Official OpenAI Codex documentation was searched for a machine-readable CLI command, documented local usage API/IPC, and documented non-secret metadata file; none was found. API model rate-limit tables are not per-ChatGPT-account remaining-capacity data and are not used.
+The installed `codex-cli 0.142.5` app-server schema exposes `account/rateLimits/read`. The provider starts `codex app-server --stdio` with `CODEX_HOME` set to one saved profile, performs protocol initialization, requests the structured limit snapshot, and terminates the child process. This avoids terminal emulation and remains independent of `/status` screen layout.
 
-Consequently, the runtime wires `UnavailableUsageProvider`. It does not read credential files, start isolated profile processes, call undocumented endpoints, or schedule refresh work. The automatic master setting is forced off while the capability is unavailable. A future provider must use a documented supported contract and return normalized snapshots without exposing raw payloads.
+The runtime stores only normalized limit windows, remaining percentages, reset timestamps, and capture metadata. Raw app-server messages and credentials are never persisted. Refresh calls are serialized, cancellable, timeout-bound, and isolated per profile.
 
 Limit indicators appear as small emoji next to profile names in the overlay:
 - ⭐: Recommended profile (only when ≥2 profiles have fresh comparable data)
