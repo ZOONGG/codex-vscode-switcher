@@ -28,8 +28,19 @@ public sealed class ProfileStatusStore
                 return new ProfileStatusDocument();
             }
 
-            using FileStream stream = File.OpenRead(statusFile);
-            return JsonSerializer.Deserialize<ProfileStatusDocument>(stream, SerializerOptions) ?? new ProfileStatusDocument();
+            try
+            {
+                using FileStream stream = File.OpenRead(statusFile);
+                return Normalize(JsonSerializer.Deserialize<ProfileStatusDocument>(stream, SerializerOptions));
+            }
+            catch (JsonException)
+            {
+                return new ProfileStatusDocument();
+            }
+            catch (IOException)
+            {
+                return new ProfileStatusDocument();
+            }
         }
     }
 
@@ -38,6 +49,7 @@ public sealed class ProfileStatusStore
         lock (lockObject)
         {
             ArgumentNullException.ThrowIfNull(document);
+            Normalize(document);
             Directory.CreateDirectory(Path.GetDirectoryName(statusFile)!);
 
             string temp = statusFile + ".tmp";
@@ -66,5 +78,37 @@ public sealed class ProfileStatusStore
             document.Profiles.Add(status);
         }
         return status;
+    }
+
+    private static ProfileStatusDocument Normalize(ProfileStatusDocument? document)
+    {
+        document ??= new ProfileStatusDocument();
+        document.SchemaVersion = 2;
+        document.Profiles ??= [];
+        document.Snapshots ??= new Dictionary<string, UsageSnapshot>(StringComparer.OrdinalIgnoreCase);
+        document.Snapshots = new Dictionary<string, UsageSnapshot>(document.Snapshots, StringComparer.OrdinalIgnoreCase);
+
+        foreach (ProfileStatusMetadata status in document.Profiles)
+        {
+            status.ProfileId = status.ProfileId.Trim();
+            status.ManualResetAt = status.ManualResetAt?.ToUniversalTime();
+            status.LastAutomaticSnapshot = status.LastAutomaticSnapshot?.ToUniversalTime();
+            status.LastRefreshAttemptAt = status.LastRefreshAttemptAt?.ToUniversalTime();
+        }
+
+        foreach (UsageSnapshot snapshot in document.Snapshots.Values)
+        {
+            snapshot.Windows ??= [];
+            snapshot.CapturedAt = snapshot.CapturedAt.ToUniversalTime();
+            snapshot.ShortWindowResetAt = snapshot.ShortWindowResetAt?.ToUniversalTime();
+            snapshot.LongWindowResetAt = snapshot.LongWindowResetAt?.ToUniversalTime();
+            foreach (UsageLimitWindow window in snapshot.Windows)
+            {
+                window.Name = window.Name.Trim();
+                window.ResetAt = window.ResetAt?.ToUniversalTime();
+            }
+        }
+
+        return document;
     }
 }

@@ -236,6 +236,22 @@ Shows the active profile in a smaller dropdown with access to profiles and commo
 
 The overlay can be positioned after the Codex menu, centered, aligned right, or dragged to a custom location with `Alt + left mouse button`.
 
+## Profile status and limit indicators
+
+Settings → **Status and limits** provides optional local metadata for every profile: an emoji, a short label (24 characters), a note (120 characters), and an optional reset time. This data is saved in `%LOCALAPPDATA%\CodexProfileOverlay\profile-status.json`; it is never written to a profile directory or credential file. Manual labels and notes stay in Settings. A manual emoji can be enabled separately for the overlay and is off by default.
+
+The automatic provider interface is present, but automatic Codex account usage retrieval is currently **unavailable**. Codex CLI `0.142.5` exposes no supported machine-readable usage/limits command, and the official Codex documentation does not document a local usage API, IPC contract, or non-secret usage metadata file. The master toggle therefore stays disabled, no background usage process runs, and the overlay shows no fabricated emoji or zero value.
+
+When a supported provider becomes available, the overlay remains emoji-only:
+
+- ⭐ recommended profile;
+- 🟢 at or above the configurable high threshold (60% by default);
+- 🟡 at or above the medium threshold (25% by default);
+- 🔴 below the medium threshold or exhausted;
+- no emoji for unknown, disabled, unavailable, failed, or stale data.
+
+The effective capacity is the lowest remaining percentage across all reported windows. A recommendation requires at least two fresh comparable profiles, maximizes that lowest percentage, then uses average capacity and nearest reset as tie-breakers. An exact tie produces no recommendation. Unknown usage is never displayed as zero. Cached automatic snapshots are kept when the feature is disabled or a refresh fails.
+
 ## System tray
 
 The tray menu provides:

@@ -59,10 +59,16 @@ internal sealed class OverlayController : IDisposable
         localizer = new Localizer(settings.Language);
         visibilityState.AutomaticDisplayEnabled = settings.ShowAutomaticallyWhenCodexOpens;
         windowFinder = new CodexWindowFinder(logger);
-        timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        timer.Tick += (_, _) => Tick();
+        timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(750) };
+        timer.Tick += (_, _) => TickSafely();
         statusStore = new ProfileStatusStore(paths.ProfileStatusFile);
         statusService = new ProfileStatusService(statusStore, new UnavailableUsageProvider(), logger);
+        statusService.SetStaleThreshold(TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes));
+        if (statusService.ProviderCapability != UsageProviderCapability.Supported && settings.ShowAutomaticLimitIndicators)
+        {
+            settings.ShowAutomaticLimitIndicators = false;
+            settingsService.Save(settings);
+        }
     }
 
     public void Start()
@@ -84,6 +90,7 @@ internal sealed class OverlayController : IDisposable
     {
         disposalTokenSource.Cancel();
         timer.Stop();
+        statusService.Dispose();
         hotkeyManager?.Dispose();
         trayIcon?.Dispose();
         settingsWindow?.Close();
@@ -164,7 +171,9 @@ internal sealed class OverlayController : IDisposable
         }
 
         EnsureOverlay();
-        var found = windowFinder.FindMainWindow();
+        CodexWindowInfo? found = attachedWindow is null
+            ? windowFinder.FindMainWindow()
+            : windowFinder.RefreshKnownWindow(attachedWindow) ?? windowFinder.FindMainWindow();
         if (found is null)
         {
             visibilityState.MarkCodexUnavailable();
@@ -204,6 +213,18 @@ internal sealed class OverlayController : IDisposable
         trayIcon?.UpdateOverlayState(overlayWindow.IsVisible);
     }
 
+    private void TickSafely()
+    {
+        try
+        {
+            Tick();
+        }
+        catch (Exception exception)
+        {
+            logger.Error("Overlay tracking tick failed.", exception);
+        }
+    }
+
     private void ToggleOverlay()
     {
         EnsureOverlay();
@@ -240,14 +261,7 @@ internal sealed class OverlayController : IDisposable
             settingsWindow?.SetConflicts(RegisterHotkeys());
             profileManagerWindow?.UpdateProfiles(profiles, activeProfile);
 
-            // Update status indicators
-            var statusDocument = statusService.Load();
-            string? recommendedProfile = statusService.FindRecommendedProfile(
-                profiles.Select(p => p.Name).ToArray(),
-                statusDocument,
-                settings.GreenThresholdPercent,
-                settings.YellowThresholdPercent);
-            overlayWindow?.SetStatusDocument(statusDocument, recommendedProfile);
+            RefreshStatusIndicators();
         }
         catch (Exception exception)
         {
@@ -481,7 +495,10 @@ internal sealed class OverlayController : IDisposable
             settings,
             profiles,
             localizer,
+            statusService,
             SaveSettings,
+            RefreshStatusIndicators,
+            RefreshUsageForProfileAsync,
             () => _ = AddProfileAsync(),
             ShowProfileManager,
             () => OpenFolder(paths.ProfilesDirectory),
@@ -673,10 +690,17 @@ internal sealed class OverlayController : IDisposable
         try
         {
             settings = updatedSettings;
+            if (statusService.ProviderCapability != UsageProviderCapability.Supported)
+            {
+                settings.ShowAutomaticLimitIndicators = false;
+            }
+
+            statusService.SetStaleThreshold(TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes));
             localizer.SetLanguage(settings.Language);
             visibilityState.AutomaticDisplayEnabled = settings.ShowAutomaticallyWhenCodexOpens;
             settingsService.Save(settings);
             ApplySettings();
+            RefreshStatusIndicators();
         }
         catch (Exception exception)
         {
@@ -697,6 +721,33 @@ internal sealed class OverlayController : IDisposable
             logger.Error("Could not update startup registration.", exception);
             overlayWindow?.ShowError(localizer["StartupCouldNotUpdate"]);
         }
+    }
+
+    private void RefreshStatusIndicators()
+    {
+        ProfileStatusDocument statusDocument = statusService.Load();
+        string? recommendedProfile = settings.ShowAutomaticLimitIndicators
+            ? statusService.FindRecommendedProfile(profiles.Select(profile => profile.Name).ToArray(), statusDocument)
+            : null;
+        overlayWindow?.SetStatusDocument(statusDocument, recommendedProfile);
+    }
+
+    private async Task RefreshUsageForProfileAsync(string profileName)
+    {
+        if (switching || !UsageRefreshPolicy.AllowsAutomaticRefresh(settings, statusService.ProviderCapability))
+        {
+            return;
+        }
+
+        ProfileInfo? profile = profiles.FirstOrDefault(item => item.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase));
+        if (profile is null)
+        {
+            return;
+        }
+
+        ProfileStatusDocument document = statusService.Load();
+        await statusService.RefreshUsageAsync(profile.Name, profile.DirectoryPath, document, disposalTokenSource.Token).ConfigureAwait(true);
+        RefreshStatusIndicators();
     }
 
     private void ResetPosition()
@@ -803,6 +854,17 @@ internal sealed class OverlayController : IDisposable
     {
         try
         {
+            CodexWindowInfo? existing = attachedWindow is null
+                ? windowFinder.FindMainWindow()
+                : windowFinder.RefreshKnownWindow(attachedWindow) ?? windowFinder.FindMainWindow();
+            if (existing is not null)
+            {
+                attachedWindow = existing;
+                overlayWindow?.AttachTo(existing.Hwnd);
+                overlayWindow?.UpdatePlacement(existing.Hwnd);
+                return;
+            }
+
             processService.LaunchCodex();
             if (!await WaitForCodexWindowAsync(cancellationToken, TimeSpan.FromSeconds(20)).ConfigureAwait(true))
             {

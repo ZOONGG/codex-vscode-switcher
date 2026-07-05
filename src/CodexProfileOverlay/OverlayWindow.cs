@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -35,6 +36,11 @@ internal sealed class OverlayWindow : Window
     private Point dragOffset;
     private OverlayDisplayMode resolvedAutoMode = OverlayDisplayMode.Expanded;
     private OverlayDisplayMode currentMode = OverlayDisplayMode.Expanded;
+    private Rect lastClientBounds = Rect.Empty;
+    private double lastTargetLeft = double.NaN;
+    private double lastTargetTop = double.NaN;
+    private bool placementDirty = true;
+    private string indicatorSignature = string.Empty;
 
     public OverlayWindow(OverlaySettings settings, SafeLogger logger)
     {
@@ -132,7 +138,12 @@ internal sealed class OverlayWindow : Window
             RebuildContent();
         }
 
-        UpdateLayout();
+        bool geometryChanged = placementDirty || !NearlyEqual(clientBounds, lastClientBounds);
+        if (geometryChanged)
+        {
+            UpdateLayout();
+        }
+
         var placement = layoutService.CalculatePlacement(
             settings.PositionPreset,
             clientBounds.Width,
@@ -153,37 +164,64 @@ internal sealed class OverlayWindow : Window
             return;
         }
 
-        Left = clientBounds.Left + placement.OffsetX;
-        Top = clientBounds.Top + placement.OffsetY;
+        double targetLeft = clientBounds.Left + placement.OffsetX;
+        double targetTop = clientBounds.Top + placement.OffsetY;
+        bool positionChanged = geometryChanged
+            || !NearlyEqual(targetLeft, lastTargetLeft)
+            || !NearlyEqual(targetTop, lastTargetTop);
+        if (positionChanged)
+        {
+            Left = targetLeft;
+            Top = targetTop;
+            lastTargetLeft = targetLeft;
+            lastTargetTop = targetTop;
+            lastClientBounds = clientBounds;
+            placementDirty = false;
+        }
 
+        bool wasVisible = IsVisible;
         if (!IsVisible && settings.ShowAutomaticallyWhenCodexOpens && AllowAutoShow)
         {
             Show();
         }
 
-        var handle = new WindowInteropHelper(this).Handle;
-        _ = NativeMethods.SetWindowPos(
-            handle,
-            IntPtr.Zero,
-            (int)Math.Round(Left),
-            (int)Math.Round(Top),
-            0,
-            0,
-            NativeMethods.SwpNoSize | NativeMethods.SwpNoZOrder | NativeMethods.SwpNoActivate | NativeMethods.SwpShowWindow);
+        if (positionChanged || (!wasVisible && IsVisible))
+        {
+            var handle = new WindowInteropHelper(this).Handle;
+            _ = NativeMethods.SetWindowPos(
+                handle,
+                IntPtr.Zero,
+                (int)Math.Round(Left),
+                (int)Math.Round(Top),
+                0,
+                0,
+                NativeMethods.SwpNoSize | NativeMethods.SwpNoZOrder | NativeMethods.SwpNoActivate | NativeMethods.SwpShowWindow);
+        }
     }
 
     public void SetProfiles(IReadOnlyList<ProfileInfo> newProfiles, string? newActiveProfile)
     {
+        bool unchanged = string.Equals(activeProfile, newActiveProfile, StringComparison.OrdinalIgnoreCase)
+            && profiles.SequenceEqual(newProfiles);
         profiles = newProfiles;
         activeProfile = newActiveProfile;
-        RebuildContent();
+        if (!unchanged)
+        {
+            indicatorSignature = BuildIndicatorSignature();
+            RebuildContent();
+        }
     }
 
     public void SetStatusDocument(ProfileStatusDocument document, string? recommendedProfileId)
     {
         statusDocument = document;
         recommendedProfile = recommendedProfileId;
-        RebuildContent();
+        string newSignature = BuildIndicatorSignature();
+        if (!string.Equals(indicatorSignature, newSignature, StringComparison.Ordinal))
+        {
+            indicatorSignature = newSignature;
+            RebuildContent();
+        }
     }
 
     public void SetSwitching(bool switching)
@@ -208,6 +246,7 @@ internal sealed class OverlayWindow : Window
 
     private void RebuildContent()
     {
+        placementDirty = true;
         Width = LogicalWidth * SanitizedScale;
         shell.Height = double.NaN;
         shell.MinHeight = currentMode == OverlayDisplayMode.Compact ? 44 : 44;
@@ -262,6 +301,12 @@ internal sealed class OverlayWindow : Window
         grid.Children.Add(name);
 
         var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        string activeIndicator = active is null ? string.Empty : GetProfileIndicator(active.Name);
+        if (!string.IsNullOrEmpty(activeIndicator))
+        {
+            right.Children.Add(CreateIndicator(active!.Name, activeIndicator, new Thickness(0, 0, 8, 0)));
+        }
+
         right.Children.Add(new Ellipse { Width = 8, Height = 8, Fill = FindBrush("AccentBrush"), Margin = new Thickness(0, 0, 9, 0) });
         right.Children.Add(new System.Windows.Shapes.Path
         {
@@ -342,7 +387,13 @@ internal sealed class OverlayWindow : Window
         foreach (ProfileInfo profile in profiles)
         {
             bool isActive = string.Equals(profile.Name, activeProfile, StringComparison.OrdinalIgnoreCase);
-            Button item = CreatePopupButton(profile.DisplayName + (isActive ? "  " + (Localizer?["Active"] ?? "Active") : string.Empty), isActive ? "M 2 7 L 6 11 L 14 3" : null);
+            string indicator = GetProfileIndicator(profile.Name);
+            string label = profile.DisplayName + (string.IsNullOrEmpty(indicator) ? string.Empty : "  " + indicator);
+            Button item = CreatePopupButton(label, isActive ? "M 2 7 L 6 11 L 14 3" : null);
+            if (!string.IsNullOrEmpty(indicator))
+            {
+                item.ToolTip = BuildUsageToolTip(profile.Name);
+            }
             item.IsEnabled = !isActive && !isSwitching;
             string name = profile.Name;
             item.Click += (_, _) =>
@@ -383,20 +434,10 @@ internal sealed class OverlayWindow : Window
             MaxWidth = 112,
         });
 
-        // Add limit indicator emoji if enabled
-        if (settings.ShowAutomaticLimitIndicators && statusDocument is not null && settings.ShowIndicatorsInOverlay)
+        string indicator = GetProfileIndicator(profile.Name);
+        if (!string.IsNullOrEmpty(indicator))
         {
-            string indicator = GetLimitIndicator(profile.Name);
-            if (!string.IsNullOrEmpty(indicator))
-            {
-                row.Children.Add(new TextBlock
-                {
-                    Text = indicator,
-                    FontSize = 14,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(4, 0, 0, 0),
-                });
-            }
+            row.Children.Add(CreateIndicator(profile.Name, indicator, new Thickness(4, 0, 0, 0)));
         }
 
         var content = new Grid();
@@ -448,47 +489,114 @@ internal sealed class OverlayWindow : Window
         return button;
     }
 
-    private string GetLimitIndicator(string profileId)
+    private string GetProfileIndicator(string profileId)
     {
-        if (statusDocument?.Snapshots is null)
+        if (statusDocument is null)
         {
             return string.Empty;
         }
 
-        UsageSnapshot? snapshot = statusDocument.Snapshots.TryGetValue(profileId, out UsageSnapshot? snap) ? snap : null;
-        if (snapshot is null || snapshot.IsStale)
+        if (settings.ShowAutomaticLimitIndicators && settings.ShowIndicatorsInOverlay)
+        {
+            UsageSnapshot? snapshot = statusDocument.Snapshots.TryGetValue(profileId, out UsageSnapshot? snap) ? snap : null;
+            string automatic = ProfileIndicatorFormatter.FormatAutomatic(
+                snapshot,
+                enabled: true,
+                settings.GreenThresholdPercent,
+                settings.YellowThresholdPercent,
+                DateTimeOffset.UtcNow,
+                TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes),
+                profileId.Equals(recommendedProfile, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(automatic))
+            {
+                return automatic;
+            }
+        }
+
+        if (!settings.ShowManualProfileEmojiInOverlay)
         {
             return string.Empty;
         }
 
-        // Check if this is the recommended profile
-        if (profileId.Equals(recommendedProfile, StringComparison.OrdinalIgnoreCase))
-        {
-            return "⭐";
-        }
-
-        return GetAutomaticIndicator(snapshot);
+        string? manual = statusDocument.Profiles
+            .FirstOrDefault(status => profileId.Equals(status.ProfileId, StringComparison.OrdinalIgnoreCase))
+            ?.ManualEmoji;
+        return FirstTextElement(manual);
     }
 
-    private string GetAutomaticIndicator(UsageSnapshot snapshot)
+    private TextBlock CreateIndicator(string profileId, string indicator, Thickness margin)
     {
-        if (snapshot.ShortWindowRemainingPercent is not int percent)
+        return new TextBlock
+        {
+            Text = indicator,
+            FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = margin,
+            ToolTip = BuildUsageToolTip(profileId),
+        };
+    }
+
+    private object? BuildUsageToolTip(string profileId)
+    {
+        if (statusDocument is null || !statusDocument.Snapshots.TryGetValue(profileId, out UsageSnapshot? snapshot))
+        {
+            return null;
+        }
+
+        var lines = new List<string>();
+        foreach (UsageLimitWindow window in UsageIntelligence.GetKnownWindows(snapshot))
+        {
+            string name = string.IsNullOrWhiteSpace(window.Name) ? Localizer?["UsageWindow"] ?? "Limit" : window.Name;
+            string reset = window.ResetAt is null
+                ? string.Empty
+                : $", {Localizer?["ResetsAt"] ?? "resets"} {UsageDisplayFormatter.FormatLocal(window.ResetAt.Value)}";
+            lines.Add($"{name}: {window.RemainingPercent}%{reset}");
+        }
+
+        lines.Add($"{Localizer?["LastUpdated"] ?? "Last updated"}: {UsageDisplayFormatter.FormatLocal(snapshot.CapturedAt)}");
+        if (!string.IsNullOrWhiteSpace(snapshot.Source))
+        {
+            lines.Add($"{Localizer?["UsageSource"] ?? "Source"}: {snapshot.Source}");
+        }
+
+        if (UsageIntelligence.IsStale(snapshot, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes)))
+        {
+            lines.Add(Localizer?["UsageDataStale"] ?? "Usage data is stale");
+        }
+
+        string? error = statusDocument.Profiles
+            .FirstOrDefault(status => profileId.Equals(status.ProfileId, StringComparison.OrdinalIgnoreCase))
+            ?.LastRefreshError;
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            lines.Add($"{Localizer?["RefreshError"] ?? "Refresh error"}: {error}");
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private string BuildIndicatorSignature()
+        => string.Join('|', profiles.Select(profile => profile.Name + ":" + GetProfileIndicator(profile.Name)));
+
+    private static string FirstTextElement(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
         {
             return string.Empty;
         }
 
-        if (percent >= settings.GreenThresholdPercent)
-        {
-            return "🟢";
-        }
-
-        if (percent >= settings.YellowThresholdPercent)
-        {
-            return "🟡";
-        }
-
-        return "🔴";
+        TextElementEnumerator enumerator = StringInfo.GetTextElementEnumerator(value.Trim());
+        return enumerator.MoveNext() ? enumerator.GetTextElement() : string.Empty;
     }
+
+    private static bool NearlyEqual(Rect left, Rect right)
+        => NearlyEqual(left.Left, right.Left)
+            && NearlyEqual(left.Top, right.Top)
+            && NearlyEqual(left.Width, right.Width)
+            && NearlyEqual(left.Height, right.Height);
+
+    private static bool NearlyEqual(double left, double right)
+        => double.IsFinite(left) && double.IsFinite(right) && Math.Abs(left - right) < 0.25;
 
     private Button CreateMenuButton()
     {

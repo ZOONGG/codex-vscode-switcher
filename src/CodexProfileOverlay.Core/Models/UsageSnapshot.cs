@@ -2,6 +2,9 @@ namespace CodexProfileOverlay.Core.Models;
 
 public sealed class UsageSnapshot
 {
+    public List<UsageLimitWindow> Windows { get; set; } = [];
+
+    // Kept for backward-compatible deserialization of the first status document format.
     public int? ShortWindowRemainingPercent { get; set; }
 
     public DateTimeOffset? ShortWindowResetAt { get; set; }

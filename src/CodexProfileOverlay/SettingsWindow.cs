@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using CodexProfileOverlay.Core.Models;
+using CodexProfileOverlay.Core.Services;
 using Button = System.Windows.Controls.Button;
 using Control = System.Windows.Controls.Control;
 using Forms = System.Windows.Forms;
@@ -15,6 +16,9 @@ internal sealed class SettingsWindow : Window
 {
     private readonly OverlaySettings settings;
     private readonly Action<OverlaySettings> save;
+    private readonly Action statusChanged;
+    private readonly Func<string, Task> refreshUsage;
+    private readonly ProfileStatusService statusService;
     private readonly Action addProfile;
     private readonly Action manageProfiles;
     private readonly Action openProfilesFolder;
@@ -37,12 +41,16 @@ internal sealed class SettingsWindow : Window
     private IReadOnlyList<ProfileInfo> profiles;
     private SettingsPage page = SettingsPage.General;
     private bool isRebuilding;
+    private string? selectedStatusProfile;
 
     public SettingsWindow(
         OverlaySettings settings,
         IReadOnlyList<ProfileInfo> profiles,
         Localizer localizer,
+        ProfileStatusService statusService,
         Action<OverlaySettings> save,
+        Action statusChanged,
+        Func<string, Task> refreshUsage,
         Action addProfile,
         Action manageProfiles,
         Action openProfilesFolder,
@@ -57,7 +65,10 @@ internal sealed class SettingsWindow : Window
         this.settings = settings;
         this.profiles = profiles;
         this.localizer = localizer;
+        this.statusService = statusService;
         this.save = save;
+        this.statusChanged = statusChanged;
+        this.refreshUsage = refreshUsage;
         this.addProfile = addProfile;
         this.manageProfiles = manageProfiles;
         this.openProfilesFolder = openProfilesFolder;
@@ -97,7 +108,7 @@ internal sealed class SettingsWindow : Window
     public void UpdateProfiles(IReadOnlyList<ProfileInfo> newProfiles)
     {
         profiles = newProfiles;
-        if (page == SettingsPage.Hotkeys || page == SettingsPage.Profiles)
+        if (page is SettingsPage.Hotkeys or SettingsPage.Profiles or SettingsPage.Status)
         {
             Rebuild();
         }
@@ -427,60 +438,63 @@ internal sealed class SettingsWindow : Window
     private UIElement BuildStatusPage()
     {
         var stack = PageStack();
+        bool providerSupported = statusService.ProviderCapability == UsageProviderCapability.Supported;
         var rows = new List<UIElement>
         {
-            SettingCheck(localizer["ShowAutomaticLimitIndicators"], localizer["ShowAutomaticLimitIndicatorsHelp"], settings.ShowAutomaticLimitIndicators, value => settings.ShowAutomaticLimitIndicators = value),
+            SettingCheck(
+                localizer["ShowAutomaticLimitIndicators"],
+                providerSupported ? localizer["ShowAutomaticLimitIndicatorsHelp"] : localizer["AutomaticLimitsUnavailableHelp"],
+                settings.ShowAutomaticLimitIndicators && providerSupported,
+                value => settings.ShowAutomaticLimitIndicators = value,
+                providerSupported),
             SettingCheck(localizer["ShowIndicatorsInOverlay"], localizer["ShowIndicatorsInOverlayHelp"], settings.ShowIndicatorsInOverlay, value => settings.ShowIndicatorsInOverlay = value),
-            NumberInput(localizer["GreenThreshold"], localizer["HighCapacityHelp"], settings.GreenThresholdPercent, value => settings.GreenThresholdPercent = (int)value, 1, 10, 100),
-            NumberInput(localizer["YellowThreshold"], localizer["MediumCapacityHelp"], settings.YellowThresholdPercent, value => settings.YellowThresholdPercent = (int)value, 1, 5, 90),
-            NumberInput(localizer["StaleDataThreshold"], localizer["StaleDataThresholdHelp"], settings.StaleDataThresholdMinutes, value => settings.StaleDataThresholdMinutes = (int)value, 1, 5, 1440),
+            SettingCheck(localizer["ShowManualEmoji"], localizer["ShowManualEmojiHelp"], settings.ShowManualProfileEmojiInOverlay, value => settings.ShowManualProfileEmojiInOverlay = value),
+            NumberInput(localizer["GreenThreshold"], localizer["GreenThresholdHelp"], settings.GreenThresholdPercent, value => settings.GreenThresholdPercent = (int)value, 1, 26, 100),
+            NumberInput(localizer["YellowThreshold"], localizer["YellowThresholdHelp"], settings.YellowThresholdPercent, value => settings.YellowThresholdPercent = (int)value, 1, 1, 99),
+            NumberInput(localizer["StaleDataThreshold"], localizer["StaleDataThresholdHelp"], settings.StaleDataThresholdMinutes, value => settings.StaleDataThresholdMinutes = (int)value, 1, 10, 1440),
             NumberInput(localizer["LowWarningThreshold"], localizer["LowWarningThresholdHelp"], settings.LowWarningThresholdPercent, value => settings.LowWarningThresholdPercent = (int)value, 1, 5, 50),
+            SettingCheck(localizer["WarnNearlyExhausted"], localizer["WarnNearlyExhaustedHelp"], settings.WarnWhenNearlyExhausted, value => settings.WarnWhenNearlyExhausted = value),
             NumberInput(localizer["ActiveProfileRefreshInterval"], localizer["ActiveProfileRefreshIntervalHelp"], settings.ActiveProfileRefreshIntervalMinutes, value => settings.ActiveProfileRefreshIntervalMinutes = (int)value, 1, 10, 120),
             NumberInput(localizer["InactiveProfileRefreshInterval"], localizer["InactiveProfileRefreshIntervalHelp"], settings.InactiveProfileRefreshIntervalMinutes, value => settings.InactiveProfileRefreshIntervalMinutes = (int)value, 1, 10, 1440),
         };
 
-        // Add legend section
-        var legend = new StackPanel { Margin = new Thickness(0, 18, 0, 0) };
+        stack.Children.Add(Card(rows.ToArray()));
+        stack.Children.Add(BuildManualStatusEditor(providerSupported));
+
+        var legend = new StackPanel();
         legend.Children.Add(new TextBlock
         {
-            Text = localizer["RecommendedProfile"],
-            FontSize = 14,
+            Text = localizer["IndicatorLegend"],
+            FontSize = 16,
             FontWeight = FontWeights.SemiBold,
             Foreground = Brush("StrongTextBrush"),
-            Margin = new Thickness(0, 0, 0, 6),
+            Margin = new Thickness(0, 0, 0, 10),
         });
+        foreach (string line in new[]
+        {
+            "⭐ " + localizer["RecommendedProfile"] + Environment.NewLine + localizer["RecommendedProfileHelp"],
+            "🟢 " + localizer["HighCapacity"] + Environment.NewLine + localizer["HighCapacityHelp"],
+            "🟡 " + localizer["MediumCapacity"] + Environment.NewLine + localizer["MediumCapacityHelp"],
+            "🔴 " + localizer["LowCapacity"] + Environment.NewLine + localizer["LowCapacityHelp"],
+        })
+        {
+            legend.Children.Add(new TextBlock
+            {
+                Text = line,
+                FontSize = 13,
+                Foreground = Brush("MutedTextBrush"),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 10),
+            });
+        }
+
         legend.Children.Add(new TextBlock
         {
-            Text = "⭐ " + localizer["RecommendedProfileHelp"],
-            FontSize = 13,
-            Foreground = Brush("MutedTextBrush"),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 6),
-        });
-        legend.Children.Add(new TextBlock
-        {
-            Text = "🟢 " + localizer["HighCapacityHelp"],
-            FontSize = 13,
-            Foreground = Brush("MutedTextBrush"),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 6),
-        });
-        legend.Children.Add(new TextBlock
-        {
-            Text = "🟡 " + localizer["MediumCapacityHelp"],
-            FontSize = 13,
-            Foreground = Brush("MutedTextBrush"),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 6),
-        });
-        legend.Children.Add(new TextBlock
-        {
-            Text = "🔴 " + localizer["LowCapacityHelp"],
+            Text = localizer["AutomaticIndicatorExplanation"],
             FontSize = 13,
             Foreground = Brush("MutedTextBrush"),
             TextWrapping = TextWrapping.Wrap,
         });
-        stack.Children.Add(Card(rows.ToArray()));
         stack.Children.Add(new Border
         {
             Child = legend,
@@ -492,6 +506,205 @@ internal sealed class SettingsWindow : Window
             Margin = new Thickness(0, 18, 0, 0),
         });
         return stack;
+    }
+
+    private UIElement BuildManualStatusEditor(bool providerSupported)
+    {
+        if (profiles.Count == 0)
+        {
+            return Card(new TextBlock { Text = localizer["NoReadyProfiles"], Foreground = Brush("MutedTextBrush") });
+        }
+
+        ProfileInfo selected = profiles.FirstOrDefault(profile => profile.Name.Equals(selectedStatusProfile, StringComparison.OrdinalIgnoreCase)) ?? profiles[0];
+        selectedStatusProfile = selected.Name;
+        ProfileStatusDocument document = statusService.Load();
+        ProfileStatusMetadata metadata = statusService.GetOrCreateStatus(document, selected.Name);
+
+        var panel = new StackPanel();
+        panel.Children.Add(new TextBlock
+        {
+            Text = localizer["ManualProfileStatus"],
+            FontSize = 16,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Brush("StrongTextBrush"),
+            Margin = new Thickness(0, 0, 0, 12),
+        });
+
+        var selector = new ComboBox
+        {
+            ItemsSource = profiles,
+            DisplayMemberPath = nameof(ProfileInfo.DisplayName),
+            SelectedItem = selected,
+            MinWidth = 260,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, 14),
+        };
+        selector.SelectionChanged += (_, _) =>
+        {
+            if (selector.SelectedItem is ProfileInfo profile && !profile.Name.Equals(selectedStatusProfile, StringComparison.OrdinalIgnoreCase))
+            {
+                selectedStatusProfile = profile.Name;
+                Rebuild();
+            }
+        };
+        panel.Children.Add(selector);
+
+        var presets = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
+        foreach ((string Emoji, string Key) preset in new[]
+        {
+            ("🟢", "PresetReady"), ("🟡", "PresetPartlyUsed"), ("🟠", "PresetLow"),
+            ("🔴", "PresetExhausted"), ("⏳", "PresetResetsSoon"), ("💤", "PresetInactive"), ("⚪", "PresetUnknown"),
+        })
+        {
+            var button = new Button { Content = preset.Emoji + " " + localizer[preset.Key], Margin = new Thickness(0, 0, 8, 8) };
+            button.Click += (_, _) =>
+            {
+                SaveManual(selected.Name, preset.Emoji, localizer[preset.Key], metadata.ManualNote, metadata.ManualResetAt, metadata.ManualColor);
+                Rebuild();
+            };
+            presets.Children.Add(button);
+        }
+        panel.Children.Add(presets);
+
+        var emoji = TextSetting(localizer["ManualEmoji"], metadata.ManualEmoji, 8, value =>
+            SaveManual(selected.Name, value, metadata.ManualLabel, metadata.ManualNote, metadata.ManualResetAt, metadata.ManualColor));
+        var label = TextSetting(localizer["ManualLabel"], metadata.ManualLabel, ProfileStatusService.MaximumLabelLength, value =>
+            SaveManual(selected.Name, metadata.ManualEmoji, value, metadata.ManualNote, metadata.ManualResetAt, metadata.ManualColor));
+        var note = TextSetting(localizer["ManualNote"], metadata.ManualNote, ProfileStatusService.MaximumNoteLength, value =>
+            SaveManual(selected.Name, metadata.ManualEmoji, metadata.ManualLabel, value, metadata.ManualResetAt, metadata.ManualColor));
+        var reset = TextSetting(localizer["ManualResetAt"], metadata.ManualResetAt is null ? null : UsageDisplayFormatter.FormatLocal(metadata.ManualResetAt.Value), 40, value =>
+        {
+            DateTimeOffset? parsed = null;
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                if (!DateTimeOffset.TryParse(value, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out DateTimeOffset date))
+                {
+                    throw new FormatException(localizer["InvalidDateTime"]);
+                }
+
+                parsed = date;
+            }
+            SaveManual(selected.Name, metadata.ManualEmoji, metadata.ManualLabel, metadata.ManualNote, parsed, metadata.ManualColor);
+        });
+        panel.Children.Add(SettingRow(localizer["ManualEmoji"], localizer["ManualEmojiHelp"], emoji));
+        panel.Children.Add(SettingRow(localizer["ManualLabel"], localizer["ManualLabelHelp"], label));
+        panel.Children.Add(SettingRow(localizer["ManualNote"], localizer["ManualNoteHelp"], note));
+        panel.Children.Add(SettingRow(localizer["ManualResetAt"], localizer["ManualResetAtHelp"], reset));
+        panel.Children.Add(SettingCheck(
+            localizer["CheckThisProfileAutomatically"],
+            localizer["CheckThisProfileAutomaticallyHelp"],
+            metadata.AutomaticRefreshEnabled,
+            value => { statusService.SetAutomaticRefreshEnabled(selected.Name, value); statusChanged(); },
+            providerSupported));
+
+        var actions = new WrapPanel();
+        var refresh = new Button { Content = localizer["RefreshNow"], IsEnabled = providerSupported && settings.ShowAutomaticLimitIndicators, Margin = new Thickness(0, 0, 8, 0) };
+        refresh.Click += async (_, _) =>
+        {
+            refresh.IsEnabled = false;
+            try
+            {
+                await refreshUsage(selected.Name);
+                Rebuild();
+            }
+            finally
+            {
+                refresh.IsEnabled = providerSupported && settings.ShowAutomaticLimitIndicators;
+            }
+        };
+        actions.Children.Add(refresh);
+        var clearManual = new Button { Content = localizer["ClearManualStatus"], Margin = new Thickness(0, 0, 8, 0) };
+        clearManual.Click += (_, _) => { statusService.ClearManualStatus(selected.Name); statusChanged(); Rebuild(); };
+        actions.Children.Add(clearManual);
+        var clearCached = new Button { Content = localizer["ClearCachedUsage"] };
+        clearCached.Click += (_, _) => { statusService.ClearCachedUsage(selected.Name); statusChanged(); Rebuild(); };
+        actions.Children.Add(clearCached);
+        panel.Children.Add(actions);
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = BuildUsageDetails(selected.Name, document, providerSupported),
+            Foreground = Brush("MutedTextBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 16, 0, 0),
+        });
+        return Card(panel);
+    }
+
+    private TextBox TextSetting(string name, string? value, int maximumLength, Action<string?> commit)
+    {
+        var box = new TextBox { Text = value ?? string.Empty, MaxLength = maximumLength, MinWidth = 260 };
+        void SaveValue()
+        {
+            try
+            {
+                commit(box.Text);
+                statusText.Foreground = Brush("SuccessBrush");
+                statusText.Text = localizer["Applied"];
+            }
+            catch (Exception exception) when (exception is ArgumentException or FormatException)
+            {
+                statusText.Foreground = Brush("ErrorBrush");
+                statusText.Text = exception.Message;
+            }
+        }
+        box.LostFocus += (_, _) => SaveValue();
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                SaveValue();
+                Keyboard.ClearFocus();
+            }
+        };
+        return box;
+    }
+
+    private void SaveManual(string profileId, string? emoji, string? label, string? note, DateTimeOffset? resetAt, string? color)
+    {
+        statusService.SaveManualStatus(profileId, emoji, label, note, resetAt, color);
+        statusChanged();
+    }
+
+    private string BuildUsageDetails(string profileId, ProfileStatusDocument document, bool providerSupported)
+    {
+        var lines = new List<string>
+        {
+            localizer[providerSupported ? "ProviderAvailable" : "AutomaticLimitsUnavailable"],
+        };
+        if (!document.Snapshots.TryGetValue(profileId, out UsageSnapshot? snapshot))
+        {
+            lines.Add(localizer["NoReliableUsageData"]);
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        foreach (UsageLimitWindow window in UsageIntelligence.GetKnownWindows(snapshot))
+        {
+            string reset = window.ResetAt is null ? string.Empty : $" · {localizer["ResetsAt"]} {UsageDisplayFormatter.FormatLocal(window.ResetAt.Value)}";
+            lines.Add($"{window.Name}: {window.RemainingPercent}%{reset}");
+        }
+        lines.Add($"{localizer["LastUpdated"]}: {UsageDisplayFormatter.FormatLocal(snapshot.CapturedAt)}");
+        if (!string.IsNullOrWhiteSpace(snapshot.Source))
+        {
+            lines.Add($"{localizer["UsageSource"]}: {snapshot.Source}");
+        }
+        if (UsageIntelligence.IsStale(snapshot, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes)))
+        {
+            lines.Add(localizer["UsageDataStale"]);
+        }
+
+        ProfileStatusMetadata? metadata = document.Profiles
+            .FirstOrDefault(status => profileId.Equals(status.ProfileId, StringComparison.OrdinalIgnoreCase));
+        if (metadata?.LastRefreshAttemptAt is not null)
+        {
+            lines.Add($"{localizer["LastRefreshAttempt"]}: {UsageDisplayFormatter.FormatLocal(metadata.LastRefreshAttemptAt.Value)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(metadata?.LastRefreshError))
+        {
+            lines.Add($"{localizer["RefreshError"]}: {metadata.LastRefreshError}");
+        }
+        return string.Join(Environment.NewLine, lines);
     }
 
     private UIElement BuildAdvancedPage()
@@ -513,9 +726,9 @@ internal sealed class SettingsWindow : Window
         return stack;
     }
 
-    private UIElement SettingCheck(string title, string subtitle, bool value, Action<bool> setter)
+    private UIElement SettingCheck(string title, string subtitle, bool value, Action<bool> setter, bool enabled = true)
     {
-        var check = new CheckBox { IsChecked = value, HorizontalAlignment = HorizontalAlignment.Left };
+        var check = new CheckBox { IsChecked = value, HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = enabled };
         check.Checked += (_, _) => { setter(true); Save(); };
         check.Unchecked += (_, _) => { setter(false); Save(); };
         return SettingRow(title, subtitle, check);

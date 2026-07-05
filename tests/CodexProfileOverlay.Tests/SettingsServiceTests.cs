@@ -69,6 +69,9 @@ public sealed class SettingsServiceTests
         Assert.Equal(720, loaded.SettingsWindowHeight);
         Assert.NotNull(loaded.Hotkeys);
         Assert.NotNull(loaded.Hotkeys.ProfileHotkeys);
+        Assert.False(loaded.ShowAutomaticLimitIndicators);
+        Assert.False(loaded.ShowManualProfileEmojiInOverlay);
+        Assert.Equal(90, loaded.StaleDataThresholdMinutes);
     }
 
     [Fact]
@@ -133,6 +136,11 @@ public sealed class SettingsServiceTests
             SettingsWindowTop = 120,
             SettingsWindowWidth = double.NaN,
             SettingsWindowHeight = 9999,
+            YellowThresholdPercent = -10,
+            GreenThresholdPercent = 5,
+            StaleDataThresholdMinutes = 1,
+            ActiveProfileRefreshIntervalMinutes = 1,
+            InactiveProfileRefreshIntervalMinutes = 2,
         });
 
         var loaded = service.Load();
@@ -145,6 +153,11 @@ public sealed class SettingsServiceTests
         Assert.Equal(120, loaded.SettingsWindowTop);
         Assert.Equal(1000, loaded.SettingsWindowWidth);
         Assert.Equal(1400, loaded.SettingsWindowHeight);
+        Assert.Equal(1, loaded.YellowThresholdPercent);
+        Assert.Equal(5, loaded.GreenThresholdPercent);
+        Assert.Equal(10, loaded.StaleDataThresholdMinutes);
+        Assert.Equal(10, loaded.ActiveProfileRefreshIntervalMinutes);
+        Assert.Equal(10, loaded.InactiveProfileRefreshIntervalMinutes);
     }
 
     [Fact]

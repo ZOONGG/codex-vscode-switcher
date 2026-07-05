@@ -23,8 +23,11 @@ public sealed class ProfileStatusStoreTests
             {
                 ["work"] = new UsageSnapshot
                 {
-                    ShortWindowRemainingPercent = 75,
-                    LongWindowRemainingPercent = 50,
+                    Windows =
+                    {
+                        new UsageLimitWindow { Name = "5h", Duration = TimeSpan.FromHours(5), RemainingPercent = 75 },
+                        new UsageLimitWindow { Name = "7d", Duration = TimeSpan.FromDays(7), RemainingPercent = 50 },
+                    },
                     CapturedAt = DateTimeOffset.UtcNow,
                 },
             },
@@ -38,7 +41,8 @@ public sealed class ProfileStatusStoreTests
         Assert.Equal("Ready", loaded.Profiles[0].ManualLabel);
         Assert.Equal("Test note", loaded.Profiles[0].ManualNote);
         Assert.Single(loaded.Snapshots);
-        Assert.Equal(75, loaded.Snapshots["work"].ShortWindowRemainingPercent);
+        Assert.Equal(2, loaded.SchemaVersion);
+        Assert.Equal(75, loaded.Snapshots["work"].Windows[0].RemainingPercent);
     }
 
     [Fact]

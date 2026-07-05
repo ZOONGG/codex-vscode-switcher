@@ -33,6 +33,33 @@ internal sealed class CodexWindowFinder
             .FirstOrDefault();
     }
 
+    public CodexWindowInfo? RefreshKnownWindow(CodexWindowInfo knownWindow)
+    {
+        if (!NativeMethods.IsWindowVisible(knownWindow.Hwnd) || IsCloaked(knownWindow.Hwnd))
+        {
+            return null;
+        }
+
+        NativeMethods.GetWindowThreadProcessId(knownWindow.Hwnd, out uint processId);
+        if (processId != knownWindow.ProcessId)
+        {
+            return null;
+        }
+
+        bool minimized = NativeMethods.IsIconic(knownWindow.Hwnd);
+        if (!NativeMethods.GetWindowRect(knownWindow.Hwnd, out NativeRect rect)
+            || (!minimized && (rect.Width <= 0 || rect.Height <= 0)))
+        {
+            return null;
+        }
+
+        return knownWindow with
+        {
+            Title = NativeMethods.GetWindowTitle(knownWindow.Hwnd),
+            IsMinimized = minimized,
+        };
+    }
+
     private CodexWindowInfo? TryCreateWindowInfo(IntPtr hwnd)
     {
         if (!NativeMethods.IsWindowVisible(hwnd))

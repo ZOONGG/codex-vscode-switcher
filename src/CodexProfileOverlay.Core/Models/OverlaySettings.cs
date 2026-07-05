@@ -54,6 +54,10 @@ public sealed class OverlaySettings
 
     public bool ShowIndicatorsInOverlay { get; set; } = true;
 
+    public bool ShowManualProfileEmojiInOverlay { get; set; }
+
+    public bool WarnWhenNearlyExhausted { get; set; } = true;
+
     public int ActiveProfileRefreshIntervalMinutes { get; set; } = 15;
 
     public int InactiveProfileRefreshIntervalMinutes { get; set; } = 60;

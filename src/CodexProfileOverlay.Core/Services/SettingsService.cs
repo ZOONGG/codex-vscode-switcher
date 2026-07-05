@@ -77,6 +77,12 @@ public sealed class SettingsService
         settings.SettingsWindowTop = NormalizeCoordinate(settings.SettingsWindowTop, -1);
         settings.Hotkeys ??= HotkeySettings.CreateDefault();
         settings.Hotkeys.ProfileHotkeys ??= [];
+        settings.YellowThresholdPercent = Math.Clamp(settings.YellowThresholdPercent, 1, 99);
+        settings.GreenThresholdPercent = Math.Clamp(settings.GreenThresholdPercent, settings.YellowThresholdPercent + 1, 100);
+        settings.StaleDataThresholdMinutes = Math.Clamp(settings.StaleDataThresholdMinutes, 10, 1440);
+        settings.LowWarningThresholdPercent = Math.Clamp(settings.LowWarningThresholdPercent, 1, 99);
+        settings.ActiveProfileRefreshIntervalMinutes = Math.Clamp(settings.ActiveProfileRefreshIntervalMinutes, 10, 1440);
+        settings.InactiveProfileRefreshIntervalMinutes = Math.Clamp(settings.InactiveProfileRefreshIntervalMinutes, 10, 1440);
         return settings;
     }
 
