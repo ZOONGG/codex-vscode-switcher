@@ -14,6 +14,7 @@ namespace CodexProfileOverlay;
 
 internal sealed class SettingsWindow : Window
 {
+    private static readonly FontFamily EmojiFont = new("Segoe UI Emoji");
     private readonly OverlaySettings settings;
     private readonly Action<OverlaySettings> save;
     private readonly Action statusChanged;
@@ -470,23 +471,10 @@ internal sealed class SettingsWindow : Window
             Foreground = Brush("StrongTextBrush"),
             Margin = new Thickness(0, 0, 0, 10),
         });
-        foreach (string line in new[]
-        {
-            "⭐ " + localizer["RecommendedProfile"] + Environment.NewLine + localizer["RecommendedProfileHelp"],
-            "🟢 " + localizer["HighCapacity"] + Environment.NewLine + localizer["HighCapacityHelp"],
-            "🟡 " + localizer["MediumCapacity"] + Environment.NewLine + localizer["MediumCapacityHelp"],
-            "🔴 " + localizer["LowCapacity"] + Environment.NewLine + localizer["LowCapacityHelp"],
-        })
-        {
-            legend.Children.Add(new TextBlock
-            {
-                Text = line,
-                FontSize = 13,
-                Foreground = Brush("MutedTextBrush"),
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 10),
-            });
-        }
+        legend.Children.Add(LegendRow("⭐", localizer["RecommendedProfile"], localizer["RecommendedProfileHelp"]));
+        legend.Children.Add(LegendRow("🟢", localizer["HighCapacity"], localizer["HighCapacityHelp"]));
+        legend.Children.Add(LegendRow("🟡", localizer["MediumCapacity"], localizer["MediumCapacityHelp"]));
+        legend.Children.Add(LegendRow("🔴", localizer["LowCapacity"], localizer["LowCapacityHelp"]));
 
         legend.Children.Add(new TextBlock
         {
@@ -506,6 +494,43 @@ internal sealed class SettingsWindow : Window
             Margin = new Thickness(0, 18, 0, 0),
         });
         return stack;
+    }
+
+    private UIElement LegendRow(string emoji, string title, string description)
+    {
+        var row = new Grid { Margin = new Thickness(0, 0, 0, 12) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(26) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        row.Children.Add(new TextBlock
+        {
+            Text = emoji,
+            FontFamily = EmojiFont,
+            FontSize = 15,
+            VerticalAlignment = VerticalAlignment.Top,
+            TextAlignment = TextAlignment.Center,
+        });
+
+        var text = new StackPanel();
+        text.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontSize = 13.5,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Brush("StrongTextBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        });
+        text.Children.Add(new TextBlock
+        {
+            Text = description,
+            FontSize = 13,
+            Foreground = Brush("MutedTextBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 2, 0, 0),
+        });
+        Grid.SetColumn(text, 1);
+        row.Children.Add(text);
+        return row;
     }
 
     private UIElement BuildManualStatusEditor(bool providerSupported)
@@ -556,7 +581,7 @@ internal sealed class SettingsWindow : Window
             ("🔴", "PresetExhausted"), ("⏳", "PresetResetsSoon"), ("💤", "PresetInactive"), ("⚪", "PresetUnknown"),
         })
         {
-            var button = new Button { Content = preset.Emoji + " " + localizer[preset.Key], Margin = new Thickness(0, 0, 8, 8) };
+            var button = new Button { Content = EmojiLabel(preset.Emoji, localizer[preset.Key]), Margin = new Thickness(0, 0, 8, 8) };
             button.Click += (_, _) =>
             {
                 SaveManual(selected.Name, preset.Emoji, localizer[preset.Key], metadata.ManualNote, metadata.ManualResetAt, metadata.ManualColor);
@@ -629,6 +654,25 @@ internal sealed class SettingsWindow : Window
             Margin = new Thickness(0, 16, 0, 0),
         });
         return Card(panel);
+    }
+
+    private static UIElement EmojiLabel(string emoji, string label)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        panel.Children.Add(new TextBlock
+        {
+            Text = emoji,
+            FontFamily = EmojiFont,
+            FontSize = 15,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 6, 0),
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = label,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        return panel;
     }
 
     private TextBox TextSetting(string name, string? value, int maximumLength, Action<string?> commit)

@@ -19,6 +19,7 @@ namespace CodexProfileOverlay;
 internal sealed class OverlayWindow : Window
 {
     private static readonly TimeSpan AnimationDuration = TimeSpan.FromMilliseconds(150);
+    private static readonly FontFamily EmojiFont = new("Segoe UI Emoji");
     private readonly OverlaySettings settings;
     private readonly SafeLogger logger;
     private readonly OverlayLayoutService layoutService = new();
@@ -388,8 +389,7 @@ internal sealed class OverlayWindow : Window
         {
             bool isActive = string.Equals(profile.Name, activeProfile, StringComparison.OrdinalIgnoreCase);
             string indicator = GetProfileIndicator(profile.Name);
-            string label = profile.DisplayName + (string.IsNullOrEmpty(indicator) ? string.Empty : "  " + indicator);
-            Button item = CreatePopupButton(label, isActive ? "M 2 7 L 6 11 L 14 3" : null);
+            Button item = CreateProfilePopupButton(profile, indicator, isActive);
             if (!string.IsNullOrEmpty(indicator))
             {
                 item.ToolTip = BuildUsageToolTip(profile.Name);
@@ -529,6 +529,7 @@ internal sealed class OverlayWindow : Window
         return new TextBlock
         {
             Text = indicator,
+            FontFamily = EmojiFont,
             FontSize = 13,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = margin,
@@ -650,6 +651,65 @@ internal sealed class OverlayWindow : Window
         button.MouseEnter += (_, _) => AnimateBrush(button, "TabHoverBrush");
         button.MouseLeave += (_, _) => AnimateBrush(button, "TabBackgroundBrush");
         return button;
+    }
+
+    private Button CreateProfilePopupButton(ProfileInfo profile, string indicator, bool isActive)
+    {
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        if (isActive)
+        {
+            grid.Children.Add(new System.Windows.Shapes.Path
+            {
+                Data = Geometry.Parse("M 2 7 L 6 11 L 14 3"),
+                Stroke = FindBrush("AccentBrush"),
+                StrokeThickness = 1.8,
+                Width = 16,
+                Height = 16,
+                Stretch = Stretch.Uniform,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+        }
+
+        var label = new TextBlock
+        {
+            Text = profile.DisplayName,
+            Foreground = FindBrush("StrongTextBrush"),
+            FontSize = 14,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(label, 1);
+        grid.Children.Add(label);
+
+        if (!string.IsNullOrEmpty(indicator))
+        {
+            var emoji = new TextBlock
+            {
+                Text = indicator,
+                FontFamily = EmojiFont,
+                FontSize = 13,
+                Margin = new Thickness(10, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Grid.SetColumn(emoji, 2);
+            grid.Children.Add(emoji);
+        }
+
+        return new Button
+        {
+            Content = grid,
+            Height = 38,
+            MinHeight = 0,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Background = FindBrush("Surface2Brush"),
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(8, 0, 8, 0),
+            Cursor = Cursors.Hand,
+        };
     }
 
     private Button CreatePopupCommand(string text, Action? action)
