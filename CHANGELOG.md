@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed a critical storage bug caused by the former per-account state backup implementation recursively copying `sessions`, attachments, rollout JSONL files, and local databases into every `state-*` rollback directory.
+- Replaced full-state rollback copies with minimal atomic authentication transactions containing only the previous authorization, active-profile metadata, and a sanitized manifest.
+- Added 10 MB per-file and 25 MB per-switch backup guards, plus retention limits of five completed backups, seven days, and 100 MB total.
+- Added safe legacy `state-*` inspection and confirmed cleanup that retains the two newest copies, along with Advanced settings storage statistics and completed-backup cleanup.
+- Added regression tests proving shared sessions, rollouts, attachments, settings, and SQLite data are never copied or changed by switching and rollback.
 - Added profile status metadata for manual tracking of profile limits and availability.
 - Added validated per-profile manual status editing in Settings; metadata remains separate from credentials.
 - Added an emoji-only overlay formatter and a deterministic recommendation algorithm for future real provider data.

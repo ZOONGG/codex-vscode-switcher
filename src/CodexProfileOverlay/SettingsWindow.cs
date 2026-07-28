@@ -20,6 +20,7 @@ internal sealed class SettingsWindow : Window
     private readonly Action statusChanged;
     private readonly Func<string, Task> refreshUsage;
     private readonly ProfileStatusService statusService;
+    private readonly BackupMaintenanceService backupMaintenance;
     private readonly Action addProfile;
     private readonly Action manageProfiles;
     private readonly Action openProfilesFolder;
@@ -49,6 +50,7 @@ internal sealed class SettingsWindow : Window
         IReadOnlyList<ProfileInfo> profiles,
         Localizer localizer,
         ProfileStatusService statusService,
+        BackupMaintenanceService backupMaintenance,
         Action<OverlaySettings> save,
         Action statusChanged,
         Func<string, Task> refreshUsage,
@@ -67,6 +69,7 @@ internal sealed class SettingsWindow : Window
         this.profiles = profiles;
         this.localizer = localizer;
         this.statusService = statusService;
+        this.backupMaintenance = backupMaintenance;
         this.save = save;
         this.statusChanged = statusChanged;
         this.refreshUsage = refreshUsage;
@@ -837,6 +840,20 @@ internal sealed class SettingsWindow : Window
     private UIElement BuildAdvancedPage()
     {
         var stack = PageStack();
+        BackupStorageSummary storage = backupMaintenance.GetStorageSummary();
+        stack.Children.Add(Card(new TextBlock
+        {
+            Text = string.Format(
+                CultureInfo.CurrentCulture,
+                localizer["BackupStorageSummary"],
+                FormatBytes(storage.TotalBytes),
+                storage.CompletedBackupCount,
+                storage.RetentionCountLimit,
+                FormatBytes(storage.RetentionStorageLimitBytes)),
+            Foreground = Brush("MutedTextBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 22,
+        }));
         stack.Children.Add(Card(
             NumberInput(localizer["GracefulTimeout"], localizer["GracefulTimeoutHelp"], settings.GracefulCloseTimeoutSeconds, value => settings.GracefulCloseTimeoutSeconds = (int)value, 1, 1, 60),
             SettingCheck(localizer["ForceCloseFallback"], localizer["ForceCloseFallbackHelp"], settings.ForceCloseFallback, value => settings.ForceCloseFallback = value),
@@ -844,6 +861,8 @@ internal sealed class SettingsWindow : Window
         stack.Children.Add(Card(CommandGrid(
             (localizer["OpenApplicationData"], "M 3 6 L 9 6 L 11 8 L 21 8 L 21 18 L 3 18 Z", openApplicationDataFolder, false),
             (localizer["OpenBackups"], "M 4 6 L 20 6 L 20 18 L 4 18 Z M 8 10 L 16 10 M 8 14 L 13 14", openBackupsFolder, false),
+            (localizer["CleanLegacyBackups"], "M 5 7 L 19 7 M 9 7 L 9 5 L 15 5 L 15 7 M 7 7 L 8 20 L 16 20 L 17 7", CleanLegacyBackups, false),
+            (localizer["CleanCompletedBackups"], "M 5 7 L 19 7 M 8 11 L 16 11 M 8 15 L 14 15", CleanCompletedBackups, false),
             (localizer["OpenLogs"], "M 6 3 L 16 3 L 20 7 L 20 21 L 6 21 Z M 15 3 L 15 8 L 20 8 M 9 12 L 17 12 M 9 16 L 17 16", openLogsFolder, false),
             (localizer["ResetPosition"], "M 12 4 L 12 20 M 4 12 L 20 12 M 7 7 L 4 12 L 7 17 M 17 7 L 20 12 L 17 17", resetPosition, false),
             (localizer["ResetSettings"], "M 6 8 C 7.5 5.5 10.2 4 13 4 C 17.4 4 21 7.6 21 12 C 21 16.4 17.4 20 13 20 C 9.9 20 7.2 18.2 5.9 15.6 M 6 8 L 6 4 M 6 8 L 10 8", resetSettings, false),
@@ -852,6 +871,68 @@ internal sealed class SettingsWindow : Window
             (localizer["ExitApplication"], "M 10 5 L 5 5 L 5 19 L 10 19 M 13 8 L 17 12 L 13 16 M 8 12 L 17 12", exitApplication, false))));
         return stack;
     }
+
+    private void CleanLegacyBackups()
+    {
+        LegacyBackupSummary summary = backupMaintenance.InspectLegacyBackups();
+        if (summary.DirectoryCount == 0)
+        {
+            statusText.Text = localizer["NoLegacyBackups"];
+            return;
+        }
+
+        string message = string.Format(
+            CultureInfo.CurrentCulture,
+            localizer["LegacyBackupCleanupPrompt"],
+            summary.DirectoryCount,
+            FormatBytes(summary.TotalBytes),
+            FormatTimestamp(summary.OldestTimestamp),
+            FormatTimestamp(summary.NewestTimestamp),
+            FormatBytes(summary.EstimatedReclaimBytes));
+        if (!ConfirmDialog.Show(this, IntPtr.Zero, localizer["CleanLegacyBackups"], message, localizer["Clean"], localizer["Cancel"], danger: true))
+        {
+            return;
+        }
+
+        backupMaintenance.CleanLegacyBackups();
+        statusText.Text = localizer["BackupCleanupCompleted"];
+        Rebuild();
+    }
+
+    private void CleanCompletedBackups()
+    {
+        if (!ConfirmDialog.Show(
+            this,
+            IntPtr.Zero,
+            localizer["CleanCompletedBackups"],
+            localizer["CompletedBackupCleanupPrompt"],
+            localizer["Clean"],
+            localizer["Cancel"],
+            danger: true))
+        {
+            return;
+        }
+
+        backupMaintenance.CleanAllCompleted();
+        statusText.Text = localizer["BackupCleanupCompleted"];
+        Rebuild();
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        double value = bytes;
+        int unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+        return $"{value:0.##} {units[unit]}";
+    }
+
+    private static string FormatTimestamp(DateTimeOffset? timestamp)
+        => timestamp?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "—";
 
     private UIElement SettingCheck(string title, string subtitle, bool value, Action<bool> setter, bool enabled = true)
     {

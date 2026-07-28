@@ -25,7 +25,27 @@ public sealed class ActiveProfileStore
     public void Write(string profileName)
     {
         string validName = ProfileName.RequireValid(profileName);
-        Directory.CreateDirectory(Path.GetDirectoryName(activeProfileFile)!);
-        File.WriteAllText(activeProfileFile, validName, new UTF8Encoding(false));
+        string directory = Path.GetDirectoryName(activeProfileFile)!;
+        Directory.CreateDirectory(directory);
+        string temporaryFile = Path.Combine(directory, $".active-profile-{Guid.NewGuid():N}.tmp");
+        File.WriteAllText(temporaryFile, validName, new UTF8Encoding(false));
+        try
+        {
+            if (File.Exists(activeProfileFile))
+            {
+                File.Replace(temporaryFile, activeProfileFile, null);
+            }
+            else
+            {
+                File.Move(temporaryFile, activeProfileFile);
+            }
+        }
+        finally
+        {
+            if (File.Exists(temporaryFile))
+            {
+                File.Delete(temporaryFile);
+            }
+        }
     }
 }

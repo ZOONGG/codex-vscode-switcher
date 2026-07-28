@@ -7,6 +7,20 @@ Codex Profile Overlay has two assemblies:
 
 The switcher keeps `%USERPROFILE%\.codex` as one shared Codex state directory for every profile. During a switch it saves the current `auth.json` into `%USERPROFILE%\.codex-profiles\<profile>`, atomically installs the selected profile's `auth.json`, and leaves chats, sessions, projects, and local databases in place. A one-time migration merges legacy per-profile session files and thread rows back into the shared store. Non-secret UI metadata lives under `%LOCALAPPDATA%\CodexProfileOverlay`.
 
+## Authentication transaction and backups
+
+`AuthSwitchService` validates the current and target authorization files before mutation. `BackupMaintenanceService` then creates an active transaction directory containing exactly:
+
+- `previous-auth.json`;
+- `previous-active-profile.txt`;
+- `manifest.json` with state, UTC timestamps, byte size, and SHA-256 hashes.
+
+No recursive workspace-copy API exists in the switch path. The service rejects any input or backup file over 10 MB and rejects a transaction estimated or measured above 25 MB. After the rollback exists, the current authorization is atomically saved to its profile, the target authorization atomically replaces the shared file, and `ActiveProfileStore` atomically updates metadata. A failed replacement or Codex relaunch restores only authorization and active-profile metadata; shared chats, sessions, settings, databases, projects, and attachments are never restored or replaced.
+
+Completed backups use the `completed-*` namespace. Cleanup runs at startup and after each switch: at most five completed backups, seven-day maximum age, and 100 MB combined storage. A manifest marked `active` is never removed. Only recognized non-active `txn-*` directories older than 24 hours qualify as abandoned temporary transactions.
+
+Legacy `state-*` directories came from the removed per-account workspace implementation. The Advanced settings page can calculate their count, size, time range, and reclaimable size without reading credential contents. Cleanup requires confirmation, retains the two newest legacy directories, ignores unknown entries, and can target only children of `%LOCALAPPDATA%\CodexProfileOverlay\backups`; `.codex` and `.codex-profiles` are outside its target set.
+
 Normal Codex launches do not set `CODEX_HOME`. The add-profile login flow sets `CODEX_HOME` only for that isolated `codex login` process.
 
 ## Profile Status and Usage Limits

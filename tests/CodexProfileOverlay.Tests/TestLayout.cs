@@ -24,13 +24,16 @@ internal sealed class TestLayout : IDisposable
 
     public ActiveProfileStore ActiveProfileStore { get; }
 
-    public AuthSwitchService CreateSwitchService(IAtomicFileReplacer? replacer = null)
+    public AuthSwitchService CreateSwitchService(
+        IAtomicFileReplacer? replacer = null,
+        BackupMaintenanceService? backups = null)
     {
         return new AuthSwitchService(
             Paths,
             new ProfileDiscoveryService(Paths.ProfilesDirectory),
             ActiveProfileStore,
-            replacer);
+            replacer,
+            backups);
     }
 
     public void AddProfile(string name, string authContent)

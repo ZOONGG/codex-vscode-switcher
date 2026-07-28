@@ -207,6 +207,12 @@ During a switch, the app:
 
 The application does **not** switch or copy the `.codex` directory on every account change. This makes restarts faster, avoids locked SQLite conflicts, and keeps every local chat available from every profile.
 
+### Rollback backup policy
+
+Each new rollback backup contains only `previous-auth.json`, previous active-profile metadata, and a small hash/timestamp manifest. Sessions, rollout files, attachments, settings, databases, logs, caches, and project data are never copied. An authorization file above 10 MB or a switch backup above 25 MB is rejected before account state changes.
+
+At startup and after a switch, the app keeps at most five completed backups, removes completed backups older than seven days, caps their total storage at 100 MB, and removes only clearly recognized abandoned temporary transactions older than 24 hours. Active transactions are never deleted. **Settings → Advanced** shows backup usage and provides actions to open the folder, clean completed backups, or inspect and explicitly clean legacy `state-*` backups while retaining the two newest.
+
 ## Adding a profile
 
 The **Add profile** flow:

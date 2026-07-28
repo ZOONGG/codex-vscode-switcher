@@ -17,6 +17,7 @@ internal sealed class OverlayController : IDisposable
     private readonly CodexProcessService processService;
     private readonly IStartupRegistrationService startupRegistrationService;
     private readonly SafeLogger logger;
+    private readonly BackupMaintenanceService backupMaintenance;
     private readonly CodexWindowFinder windowFinder;
     private readonly DispatcherTimer timer;
     private readonly AppPaths paths;
@@ -47,7 +48,8 @@ internal sealed class OverlayController : IDisposable
         AuthSwitchService switchService,
         CodexProcessService processService,
         IStartupRegistrationService startupRegistrationService,
-        SafeLogger logger)
+        SafeLogger logger,
+        BackupMaintenanceService backupMaintenance)
     {
         this.paths = paths;
         this.profileManager = profileManager;
@@ -57,6 +59,7 @@ internal sealed class OverlayController : IDisposable
         this.processService = processService;
         this.startupRegistrationService = startupRegistrationService;
         this.logger = logger;
+        this.backupMaintenance = backupMaintenance;
         settings = settingsService.Load();
         App.ApplyTheme(settings.Theme);
         localizer = new Localizer(settings.Language);
@@ -305,6 +308,7 @@ internal sealed class OverlayController : IDisposable
 
         EnsureOverlay();
         switching = true;
+        AuthSwitchResult? switchResult = null;
         overlayWindow!.SetSwitching(true);
         try
         {
@@ -322,11 +326,11 @@ internal sealed class OverlayController : IDisposable
             bool allowForceClose = settings.ForceCloseFallback;
             await processService.CloseCodexAsync(settings.GracefulCloseTimeoutSeconds, allowForceClose, disposalTokenSource.Token).ConfigureAwait(true);
             MigrateLegacyProfileStateSafely();
-            await switchService.SwitchAsync(profileName, disposalTokenSource.Token).ConfigureAwait(true);
+            switchResult = await switchService.SwitchAsync(profileName, disposalTokenSource.Token).ConfigureAwait(true);
             RefreshProfiles();
             if (settings.LaunchCodexAfterSwitching)
             {
-                await LaunchCodexAndWaitAsync(disposalTokenSource.Token).ConfigureAwait(true);
+                await LaunchCodexAndWaitAsync(disposalTokenSource.Token, throwOnFailure: true).ConfigureAwait(true);
             }
 
             overlayWindow?.ShowNotification(localizer.Format("SwitchedToAccount", profileName));
@@ -334,6 +338,18 @@ internal sealed class OverlayController : IDisposable
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            if (switchResult is not null)
+            {
+                try
+                {
+                    switchService.Rollback(switchResult);
+                    RefreshProfiles();
+                }
+                catch (Exception rollbackException)
+                {
+                    logger.Error("Authorization rollback failed.", rollbackException);
+                }
+            }
             logger.Error($"Switch to profile '{profileName}' failed.", exception);
             overlayWindow?.ShowError(localizer["CouldNotSwitch"] + " " + localizer["PreviousAuthorizationRestored"] + ".");
             trayIcon?.ShowBalloon("Codex Profile Overlay", localizer["CouldNotSwitch"] + " " + localizer["PreviousAuthorizationRestored"] + ".");
@@ -518,6 +534,7 @@ internal sealed class OverlayController : IDisposable
             profiles,
             localizer,
             statusService,
+            backupMaintenance,
             SaveSettings,
             RefreshStatusIndicators,
             RefreshUsageForProfileAsync,
@@ -951,7 +968,7 @@ internal sealed class OverlayController : IDisposable
         return processId == codexWindow.ProcessId || processId == Environment.ProcessId;
     }
 
-    private async Task LaunchCodexAndWaitAsync(CancellationToken cancellationToken)
+    private async Task LaunchCodexAndWaitAsync(CancellationToken cancellationToken, bool throwOnFailure = false)
     {
         try
         {
@@ -977,6 +994,10 @@ internal sealed class OverlayController : IDisposable
             logger.Error("Could not launch Codex.", exception);
             overlayWindow?.ShowError(localizer["CodexCouldNotLaunch"]);
             trayIcon?.ShowBalloon("Codex Profile Overlay", localizer["CodexCouldNotLaunch"]);
+            if (throwOnFailure)
+            {
+                throw;
+            }
         }
     }
 

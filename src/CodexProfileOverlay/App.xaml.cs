@@ -114,7 +114,9 @@ public partial class App : Application
             var profileManager = new ProfileManagerService(paths, profileDiscovery, profileMetadataStore);
             var activeProfileStore = new ActiveProfileStore(paths.ActiveProfileFile);
             var settingsService = new SettingsService(paths.SettingsFile);
-            var switchService = new AuthSwitchService(paths, profileDiscovery, activeProfileStore);
+            var backupMaintenance = new BackupMaintenanceService(paths, logger);
+            backupMaintenance.CleanupRetention();
+            var switchService = new AuthSwitchService(paths, profileDiscovery, activeProfileStore, backups: backupMaintenance);
             var processService = new CodexProcessService(logger);
             controller = new OverlayController(
                 paths,
@@ -124,7 +126,8 @@ public partial class App : Application
                 switchService,
                 processService,
                 new StartupRegistrationService(),
-                logger);
+                logger,
+                backupMaintenance);
             controller.Start();
             StartActivationListener();
             logger.Info("Overlay started.");

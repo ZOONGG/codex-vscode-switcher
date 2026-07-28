@@ -6,18 +6,21 @@ public sealed class AuthSwitchService
     private readonly ProfileDiscoveryService profileDiscovery;
     private readonly ActiveProfileStore activeProfileStore;
     private readonly IAtomicFileReplacer replacer;
+    private readonly BackupMaintenanceService backups;
     private readonly SemaphoreSlim switchGate = new(1, 1);
 
     public AuthSwitchService(
         AppPaths paths,
         ProfileDiscoveryService profileDiscovery,
         ActiveProfileStore activeProfileStore,
-        IAtomicFileReplacer? replacer = null)
+        IAtomicFileReplacer? replacer = null,
+        BackupMaintenanceService? backups = null)
     {
         this.paths = paths;
         this.profileDiscovery = profileDiscovery;
         this.activeProfileStore = activeProfileStore;
         this.replacer = replacer ?? new AtomicFileReplacer();
+        this.backups = backups ?? new BackupMaintenanceService(paths);
     }
 
     public async Task<AuthSwitchResult> SwitchAsync(string targetProfileName, CancellationToken cancellationToken = default)
@@ -27,7 +30,7 @@ public sealed class AuthSwitchService
             throw new InvalidOperationException("A profile switch is already in progress.");
         }
 
-        string? backupPath = null;
+        SwitchBackup? backup = null;
         string? previousProfile = null;
 
         try
@@ -39,40 +42,37 @@ public sealed class AuthSwitchService
                 throw new InvalidOperationException("The selected profile is already active.");
             }
 
-            if (previousProfile is not null && File.Exists(paths.SharedAuthFile))
-            {
-                var currentProfile = profileDiscovery.GetRequiredProfile(previousProfile);
-                File.Copy(paths.SharedAuthFile, currentProfile.AuthFilePath, overwrite: true);
-            }
-
             if (!File.Exists(targetProfile.AuthFilePath))
             {
                 throw new FileNotFoundException($"Profile '{targetProfile.Name}' does not contain auth.json.", targetProfile.AuthFilePath);
             }
 
-            ValidateReadable(targetProfile.AuthFilePath);
-
-            if (File.Exists(paths.SharedAuthFile))
+            if (!File.Exists(paths.SharedAuthFile))
             {
-                Directory.CreateDirectory(paths.BackupDirectory);
-                backupPath = Path.Combine(
-                    paths.BackupDirectory,
-                    $"auth-{DateTimeOffset.Now:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}.json");
-                File.Copy(paths.SharedAuthFile, backupPath, overwrite: false);
+                throw new FileNotFoundException("The shared auth.json does not exist.", paths.SharedAuthFile);
             }
 
+            backup = backups.CreateSwitchBackup(paths.SharedAuthFile, targetProfile.AuthFilePath, previousProfile);
             try
             {
+                if (previousProfile is not null)
+                {
+                    var currentProfile = profileDiscovery.GetRequiredProfile(previousProfile);
+                    replacer.ReplaceFromSource(paths.SharedAuthFile, currentProfile.AuthFilePath);
+                }
                 replacer.ReplaceFromSource(targetProfile.AuthFilePath, paths.SharedAuthFile);
                 activeProfileStore.Write(targetProfile.Name);
             }
             catch
             {
-                RestoreBackupIfPossible(backupPath);
+                RestoreBackupIfPossible(backup, previousProfile);
+                RestoreActiveProfile(previousProfile);
+                backups.MarkRolledBack(backup);
                 throw;
             }
 
-            return new AuthSwitchResult(targetProfile.Name, previousProfile, backupPath);
+            string completedBackup = backups.CompleteSwitchBackup(backup);
+            return new AuthSwitchResult(targetProfile.Name, previousProfile, completedBackup);
         }
         finally
         {
@@ -80,22 +80,40 @@ public sealed class AuthSwitchService
         }
     }
 
-    private void RestoreBackupIfPossible(string? backupPath)
+    public void Rollback(AuthSwitchResult result)
     {
-        if (backupPath is null || !File.Exists(backupPath))
+        if (string.IsNullOrWhiteSpace(result.BackupPath))
+        {
+            throw new InvalidOperationException("The switch result does not contain a rollback backup.");
+        }
+
+        backups.RestoreCompletedSwitchBackup(result.BackupPath, paths.SharedAuthFile, paths.ActiveProfileFile);
+    }
+
+    private void RestoreBackupIfPossible(SwitchBackup backup, string? previousProfile)
+    {
+        if (!File.Exists(backup.PreviousAuthFile))
         {
             return;
         }
 
-        new AtomicFileReplacer().ReplaceFromSource(backupPath, paths.SharedAuthFile);
+        new AtomicFileReplacer().ReplaceFromSource(backup.PreviousAuthFile, paths.SharedAuthFile);
+        if (previousProfile is not null)
+        {
+            string profileAuth = profileDiscovery.GetRequiredProfile(previousProfile).AuthFilePath;
+            new AtomicFileReplacer().ReplaceFromSource(backup.PreviousAuthFile, profileAuth);
+        }
     }
 
-    private static void ValidateReadable(string path)
+    private void RestoreActiveProfile(string? previousProfile)
     {
-        using FileStream stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        if (stream.Length == 0)
+        if (previousProfile is not null)
         {
-            throw new InvalidDataException("Target auth.json is empty.");
+            activeProfileStore.Write(previousProfile);
+        }
+        else if (File.Exists(paths.ActiveProfileFile))
+        {
+            File.Delete(paths.ActiveProfileFile);
         }
     }
 }
