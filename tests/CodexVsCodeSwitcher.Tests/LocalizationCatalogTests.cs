@@ -42,6 +42,23 @@ public sealed class LocalizationCatalogTests
     }
 
     [Fact]
+    public void ManualOverlayRevealGuidanceIsLocalized()
+    {
+        foreach (LanguagePreference language in new[] { LanguagePreference.English, LanguagePreference.Russian })
+        {
+            Assert.NotEqual(
+                "SelectProfileToShowOverlay",
+                LocalizationCatalog.Text(language, "SelectProfileToShowOverlay"));
+            Assert.NotEqual(
+                "LaunchManagedVsCodeToShowOverlay",
+                LocalizationCatalog.Text(language, "LaunchManagedVsCodeToShowOverlay"));
+            Assert.NotEqual(
+                "FocusManagedVsCodeToShowOverlay",
+                LocalizationCatalog.Text(language, "FocusManagedVsCodeToShowOverlay"));
+        }
+    }
+
+    [Fact]
     public void IndicatorLegendMatchesEnglishAndRussianProductCopy()
     {
         Assert.Equal("Recommended profile", LocalizationCatalog.Text(LanguagePreference.English, "RecommendedProfile"));

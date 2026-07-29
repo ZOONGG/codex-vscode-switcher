@@ -31,6 +31,10 @@
 - Restored Compact, Expanded, and Auto controls in both floating and VS Code-attached overlay states.
 - Profile activation controls are disabled for invalid and incomplete copied profiles.
 
+### Fixed
+
+- “Show switcher” now explains how to launch or focus managed VS Code instead of silently doing nothing while managed-only visibility is enabled.
+
 ### Removed
 
 - ChatGPT/Codex Desktop process control, window discovery, overlay attachment, shared authorization replacement, shared-state migration, and legacy rollback runtime.

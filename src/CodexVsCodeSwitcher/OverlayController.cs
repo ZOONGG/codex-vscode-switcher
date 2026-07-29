@@ -473,6 +473,17 @@ internal sealed class OverlayController : IDisposable
         {
             overlayWindow?.ShowFloating();
         }
+
+        string? guidanceKey = ManualOverlayRevealGuidance.ResolveMessageKey(
+            settings.ShowOverlayOnlyWithManagedVsCode,
+            overlayWindow?.IsVisible == true,
+            managedObservation?.Window is not null,
+            !string.IsNullOrWhiteSpace(activeProfileStore.Read()));
+        if (guidanceKey is not null)
+        {
+            ShowIntegrationNotice(guidanceKey);
+            logger.Info("Manual overlay reveal was blocked by managed VS Code visibility isolation.");
+        }
     }
 
     private void HideOverlay()
@@ -712,6 +723,13 @@ internal sealed class OverlayController : IDisposable
     {
         string message = localizer[messageKey];
         overlayWindow?.ShowError(message);
+        trayIcon?.ShowBalloon("Codex VS Code Switcher", message);
+    }
+
+    private void ShowIntegrationNotice(string messageKey)
+    {
+        string message = localizer[messageKey];
+        overlayWindow?.ShowNotification(message);
         trayIcon?.ShowBalloon("Codex VS Code Switcher", message);
     }
 
