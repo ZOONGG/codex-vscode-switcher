@@ -15,12 +15,16 @@ internal sealed class OverlayController : IDisposable
     private readonly ProfileManagerService profileManager;
     private readonly ActiveProfileStore activeProfileStore;
     private readonly SettingsService settingsService;
-    private readonly BootstrapProfileActivationService activationService;
+    private readonly IVsCodeExecutableLocator executableLocator;
+    private readonly IManagedVsCodeRuntime managedRuntime;
+    private readonly IManagedInstanceStore managedInstanceStore;
+    private readonly IWorkspaceHistoryService workspaceHistory;
+    private readonly ICodexExtensionManager extensionManager;
+    private readonly VsCodeLaunchPlanBuilder launchPlanBuilder;
     private readonly IStartupRegistrationService startupRegistrationService;
     private readonly SafeLogger logger;
     private readonly MinimalBackupService backupMaintenance;
     private readonly ProfileStatusService statusService;
-    private readonly VsCodeWindowFinder windowFinder = new();
     private readonly DispatcherTimer windowTrackingTimer;
     private readonly CancellationTokenSource disposalTokenSource = new();
     private OverlaySettings settings;
@@ -30,10 +34,12 @@ internal sealed class OverlayController : IDisposable
     private SettingsWindow? settingsWindow;
     private ProfileManagerWindow? profileManagerWindow;
     private HotkeyManager? hotkeyManager;
+    private ManagedVsCodeWindowTracker? managedWindowTracker;
     private IReadOnlyList<ProfileInfo> profiles = [];
     private IntPtr attachedVsCodeWindow;
     private bool overlayRequestedVisible;
-    private bool persistedAttachmentPreference;
+    private ManagedVsCodeObservation? managedObservation;
+    private CodexExtensionStatus? lastExtensionActionStatus;
 
     public OverlayController(
         CodexVsCodeStorageLayout paths,
@@ -41,7 +47,12 @@ internal sealed class OverlayController : IDisposable
         ProfileManagerService profileManager,
         ActiveProfileStore activeProfileStore,
         SettingsService settingsService,
-        BootstrapProfileActivationService activationService,
+        IVsCodeExecutableLocator executableLocator,
+        IManagedVsCodeRuntime managedRuntime,
+        IManagedInstanceStore managedInstanceStore,
+        IWorkspaceHistoryService workspaceHistory,
+        ICodexExtensionManager extensionManager,
+        VsCodeLaunchPlanBuilder launchPlanBuilder,
         IStartupRegistrationService startupRegistrationService,
         SafeLogger logger,
         MinimalBackupService backupMaintenance)
@@ -51,12 +62,16 @@ internal sealed class OverlayController : IDisposable
         this.profileManager = profileManager;
         this.activeProfileStore = activeProfileStore;
         this.settingsService = settingsService;
-        this.activationService = activationService;
+        this.executableLocator = executableLocator;
+        this.managedRuntime = managedRuntime;
+        this.managedInstanceStore = managedInstanceStore;
+        this.workspaceHistory = workspaceHistory;
+        this.extensionManager = extensionManager;
+        this.launchPlanBuilder = launchPlanBuilder;
         this.startupRegistrationService = startupRegistrationService;
         this.logger = logger;
         this.backupMaintenance = backupMaintenance;
         settings = settingsService.Load();
-        persistedAttachmentPreference = settings.AttachOverlayToVsCode;
         localizer = new Localizer(settings.Language);
         App.ApplyTheme(settings.Theme);
         var statusStore = new ProfileStatusStore(paths.ProfileStatusFile, protectedPaths);
@@ -64,9 +79,9 @@ internal sealed class OverlayController : IDisposable
         statusService.SetStaleThreshold(TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes));
         windowTrackingTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
-            Interval = TimeSpan.FromMilliseconds(750),
+            Interval = TimeSpan.FromSeconds(2),
         };
-        windowTrackingTimer.Tick += (_, _) => TrackVsCodeWindowSafely();
+        windowTrackingTimer.Tick += (_, _) => managedWindowTracker?.Reconcile();
     }
 
     public void Start()
@@ -75,24 +90,31 @@ internal sealed class OverlayController : IDisposable
         EnsureTray();
         RefreshProfiles();
         ApplySettings();
-        if (settings.ShowOverlayOnStart)
+        overlayRequestedVisible = settings.ShowOverlayOnStart;
+        managedWindowTracker = new ManagedVsCodeWindowTracker(
+            Application.Current.Dispatcher,
+            ObserveManagedInstanceSafely)
         {
-            ShowOverlay();
-        }
-
+            OverlayHandle = overlayWindow!.Handle,
+            ShowOnlyWithManagedVsCode = settings.ShowOverlayOnlyWithManagedVsCode,
+            ManualVisibilityRequested = overlayRequestedVisible,
+        };
+        managedWindowTracker.StateChanged += OnManagedWindowStateChanged;
+        managedWindowTracker.Start();
         windowTrackingTimer.Start();
         if (settingsService.LastLoadWarningKey is string warningKey)
         {
             overlayWindow?.ShowError(localizer[warningKey]);
         }
 
-        logger.Info("Switcher shell started; read-only VS Code window tracking is enabled and profile activation remains disabled.");
+        logger.Info("Switcher shell started with isolated managed VS Code activation enabled.");
     }
 
     public void Dispose()
     {
         disposalTokenSource.Cancel();
         windowTrackingTimer.Stop();
+        managedWindowTracker?.Dispose();
         statusService.Dispose();
         hotkeyManager?.Dispose();
         trayIcon?.Dispose();
@@ -114,14 +136,14 @@ internal sealed class OverlayController : IDisposable
 
         overlayWindow = new OverlayWindow(settings, logger)
         {
-            Topmost = true,
-            OnSwitchProfile = profile => _ = ShowBootstrapUnavailableAsync(profile),
+            Topmost = false,
+            OnSwitchProfile = profile => _ = SwitchProfileAsync(profile, restartIfActive: false),
             OnRefreshProfiles = RefreshProfiles,
             OnOpenProfilesFolder = () => OpenFolder(paths.ProfilesDirectory),
             OnOpenApplicationDataFolder = () => OpenFolder(paths.ApplicationDataDirectory),
             OnOpenSettings = ShowSettingsWindow,
             OnManageProfiles = ShowProfileManager,
-            OnAddProfile = ShowBootstrapUnavailable,
+            OnAddProfile = ShowProfileManager,
             OnHideOverlay = HideOverlay,
             OnExit = () => Application.Current.Shutdown(),
             OnSettingsChanged = SaveSettings,
@@ -134,7 +156,7 @@ internal sealed class OverlayController : IDisposable
         {
             if (index >= 0 && index < profiles.Count && profiles[index].IsEligibleForSwitching)
             {
-                _ = ShowBootstrapUnavailableAsync(profiles[index].Name);
+                _ = SwitchProfileAsync(profiles[index].Name, restartIfActive: false);
             }
         };
     }
@@ -148,9 +170,12 @@ internal sealed class OverlayController : IDisposable
 
         trayIcon = new TrayIconService(localizer);
         trayIcon.ToggleOverlayRequested += ToggleOverlay;
-        trayIcon.OpenCodexRequested += ShowSettingsWindow;
+        trayIcon.OpenCodexRequested += LaunchManagedVsCode;
         trayIcon.SettingsRequested += ShowSettingsWindow;
-        trayIcon.ProfileSelected += profile => _ = ShowBootstrapUnavailableAsync(profile);
+        trayIcon.ProfileSelected += profile => _ = SwitchProfileAsync(profile, restartIfActive: false);
+        trayIcon.LaunchManagedVsCodeRequested += LaunchManagedVsCode;
+        trayIcon.RestartManagedVsCodeRequested += RestartManagedVsCode;
+        trayIcon.InstallCodexExtensionRequested += () => _ = InstallCodexExtensionAsync();
         trayIcon.StartWithWindowsChanged += enabled =>
         {
             settings.StartWithWindows = enabled;
@@ -159,33 +184,110 @@ internal sealed class OverlayController : IDisposable
         trayIcon.ExitRequested += () => Application.Current.Shutdown();
     }
 
-    private async Task ShowBootstrapUnavailableAsync(string profile)
+    private async Task SwitchProfileAsync(string profile, bool restartIfActive)
     {
-        overlayWindow?.SetSwitching(true);
+        ProfileInfo? selected = profiles.FirstOrDefault(
+            item => item.Name.Equals(profile, StringComparison.OrdinalIgnoreCase));
+        string displayName = selected?.DisplayName ?? profile;
+        overlayWindow?.SetSwitching(true, displayName);
         try
         {
-            BootstrapActivationResult result = await activationService
-                .ActivateAsync(profile, disposalTokenSource.Token)
+            string? workspace = settings.ReopenLastWorkspaceAfterSwitch
+                ? FirstNonEmpty(settings.LastOpenedWorkspace, workspaceHistory.ReadLastWorkspace())
+                : null;
+            ProfileActivationResult result = await CreateActivationService()
+                .ActivateAsync(
+                    profile,
+                    settings.CustomVsCodeExecutablePath,
+                    settings.DedicatedVsCodeUserDataDirectory,
+                    settings.DedicatedVsCodeExtensionsDirectory,
+                    workspace,
+                    TimeSpan.FromSeconds(settings.GracefulCloseTimeoutSeconds),
+                    restartIfActive,
+                    requireExtension: true,
+                    openCodexOnStartup: settings.LaunchCodexSidebarOnStartup,
+                    progress: key => overlayWindow?.SetSwitchingStatus(localizer[key]),
+                    cancellationToken: disposalTokenSource.Token)
                 .ConfigureAwait(true);
             string message = localizer[result.MessageKey];
-            overlayWindow?.ShowError(message);
-            trayIcon?.ShowBalloon("Codex VS Code Switcher", message);
-            logger.Info($"Profile activation requested for '{profile}'; bootstrap backend refused the operation.");
+            if (result.Status is ProfileActivationStatus.Succeeded or ProfileActivationStatus.AlreadyActive)
+            {
+                overlayWindow?.ShowNotification(message);
+                logger.Info($"Managed VS Code activated for profile '{profile}'.");
+                RefreshProfiles();
+                managedWindowTracker?.Reconcile();
+                settingsWindow?.RefreshIntegrationPage();
+            }
+            else
+            {
+                overlayWindow?.SetProfileActivationStatus(profile, result.MessageKey);
+                overlayWindow?.ShowError(message);
+                trayIcon?.ShowBalloon("Codex VS Code Switcher", message);
+                logger.Info($"Managed VS Code activation for profile '{profile}' ended with {result.Status}.");
+                settingsWindow?.RefreshIntegrationPage();
+            }
         }
         catch (OperationCanceledException)
         {
         }
         finally
         {
-            overlayWindow?.SetSwitching(false);
+            overlayWindow?.SetSwitching(false, null);
         }
     }
 
-    private void ShowBootstrapUnavailable()
+    private void LaunchManagedVsCode()
     {
-        string message = localizer[BootstrapProfileActivationService.MessageKey];
-        overlayWindow?.ShowError(message);
-        trayIcon?.ShowBalloon("Codex VS Code Switcher", message);
+        string? active = activeProfileStore.Read();
+        if (string.IsNullOrWhiteSpace(active))
+        {
+            ShowIntegrationError("SelectProfileFirst");
+            return;
+        }
+
+        _ = SwitchProfileAsync(active, restartIfActive: false);
+    }
+
+    private void RestartManagedVsCode()
+    {
+        string? active = activeProfileStore.Read();
+        if (string.IsNullOrWhiteSpace(active))
+        {
+            ShowIntegrationError("SelectProfileFirst");
+            return;
+        }
+
+        _ = SwitchProfileAsync(active, restartIfActive: true);
+    }
+
+    private async Task InstallCodexExtensionAsync()
+    {
+        string? executable = executableLocator.Locate(settings.CustomVsCodeExecutablePath);
+        if (executable is null)
+        {
+            ShowIntegrationError("VsCodeExecutableMissing");
+            return;
+        }
+
+        CodexExtensionStatus result = await extensionManager.InstallAsync(
+            executable,
+            settings.DedicatedVsCodeUserDataDirectory,
+            settings.DedicatedVsCodeExtensionsDirectory,
+            disposalTokenSource.Token).ConfigureAwait(true);
+        lastExtensionActionStatus = result;
+        string key = result.State == CodexExtensionState.Installed
+            ? "CodexExtensionInstalled"
+            : result.DetailKey ?? "CodexExtensionInstallFailed";
+        if (result.State == CodexExtensionState.Installed)
+        {
+            overlayWindow?.ShowNotification(localizer[key]);
+        }
+        else
+        {
+            ShowIntegrationError(key);
+        }
+
+        settingsWindow?.RefreshIntegrationPage();
     }
 
     private void RefreshProfiles()
@@ -251,15 +353,23 @@ internal sealed class OverlayController : IDisposable
             SaveSettings,
             RefreshStatusIndicators,
             RefreshUsageForProfileAsync,
-            ShowBootstrapUnavailable,
             ShowProfileManager,
-            () => OpenFolder(paths.ProfilesDirectory),
+            ShowProfileManager,
+            () => OpenFolder(settings.CodexProfileRoot),
             () => OpenFolder(paths.RemovedProfilesDirectory),
             () => OpenFolder(paths.ApplicationDataDirectory),
             () => OpenFolder(paths.BackupDirectory),
             () => OpenFolder(paths.LogDirectory),
             ResetPosition,
             ResetSettings,
+            LaunchManagedVsCode,
+            RestartManagedVsCode,
+            () => _ = InstallCodexExtensionAsync(),
+            SelectWorkspaceFolder,
+            SelectWorkspaceFile,
+            ClearWorkspaceForNextLaunch,
+            GetIntegrationSnapshot,
+            () => OpenFolder(settings.DedicatedVsCodeUserDataDirectory),
             () => Application.Current.Shutdown());
         settingsWindow.Closed += (_, _) => settingsWindow = null;
         settingsWindow.Show();
@@ -279,7 +389,7 @@ internal sealed class OverlayController : IDisposable
             profiles,
             activeProfileStore.Read(),
             localizer,
-            ShowBootstrapUnavailable,
+            ShowProfileManager,
             RenameDisplayName,
             RemoveProfile,
             ReorderProfiles,
@@ -349,12 +459,24 @@ internal sealed class OverlayController : IDisposable
     {
         EnsureOverlay();
         overlayRequestedVisible = true;
-        UpdateOverlayHost();
+        if (managedWindowTracker is not null)
+        {
+            managedWindowTracker.ManualVisibilityRequested = true;
+            managedWindowTracker.Reconcile();
+        }
+        else if (!settings.ShowOverlayOnlyWithManagedVsCode)
+        {
+            overlayWindow?.ShowFloating();
+        }
     }
 
     private void HideOverlay()
     {
         overlayRequestedVisible = false;
+        if (managedWindowTracker is not null)
+        {
+            managedWindowTracker.ManualVisibilityRequested = false;
+        }
         overlayWindow?.Hide();
         trayIcon?.UpdateOverlayState(false);
     }
@@ -364,15 +486,17 @@ internal sealed class OverlayController : IDisposable
         App.ApplyTheme(settings.Theme);
         localizer.SetLanguage(settings.Language);
         overlayWindow?.ApplySettings();
-        if (!settings.AttachOverlayToVsCode)
+        if (!settings.AttachOverlayToVsCode || managedObservation?.Window is null)
         {
             attachedVsCodeWindow = IntPtr.Zero;
             overlayWindow?.Detach();
         }
 
-        if (overlayRequestedVisible)
+        if (managedWindowTracker is not null)
         {
-            UpdateOverlayHost();
+            managedWindowTracker.ShowOnlyWithManagedVsCode = settings.ShowOverlayOnlyWithManagedVsCode;
+            managedWindowTracker.ManualVisibilityRequested = overlayRequestedVisible;
+            managedWindowTracker.Reconcile();
         }
         settingsWindow?.RefreshTheme();
         profileManagerWindow?.RefreshTheme();
@@ -385,19 +509,8 @@ internal sealed class OverlayController : IDisposable
     {
         try
         {
-            bool explicitAttachmentRequest = updatedSettings.AttachOverlayToVsCode
-                && !persistedAttachmentPreference;
-            if (explicitAttachmentRequest && FindVsCodeWindow() == IntPtr.Zero)
-            {
-                updatedSettings.AttachOverlayToVsCode = false;
-                string message = localizer["VsCodeWindowNotFound"];
-                overlayWindow?.ShowError(message);
-                trayIcon?.ShowBalloon("Codex VS Code Switcher", message);
-            }
-
             settings = updatedSettings;
             settingsService.Save(settings);
-            persistedAttachmentPreference = settings.AttachOverlayToVsCode;
             statusService.SetStaleThreshold(TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes));
             ApplySettings();
             RefreshStatusIndicators();
@@ -453,39 +566,38 @@ internal sealed class OverlayController : IDisposable
     {
         settings = new OverlaySettings();
         settingsService.Save(settings);
-        persistedAttachmentPreference = settings.AttachOverlayToVsCode;
         settingsWindow?.Close();
         ApplySettings();
         ShowSettingsWindow();
     }
 
-    private void UpdateOverlayHost()
+    private void OnManagedWindowStateChanged(ManagedVsCodeObservation? observation, bool shouldShow)
     {
         EnsureOverlay();
-        if (!overlayRequestedVisible)
+        managedObservation = observation;
+        overlayWindow?.SetManagedVsCodeRunning(observation is not null);
+        ManagedVsCodeWindow? managedWindow = observation?.Window;
+        if (!shouldShow || managedWindow is null)
         {
+            attachedVsCodeWindow = IntPtr.Zero;
+            overlayWindow!.Hide();
+            trayIcon?.UpdateOverlayState(false);
             return;
         }
 
-        IntPtr vsCodeWindow = settings.AttachOverlayToVsCode ? FindVsCodeWindow() : IntPtr.Zero;
-        if (vsCodeWindow != IntPtr.Zero)
+        if (settings.AttachOverlayToVsCode)
         {
-            if (attachedVsCodeWindow != vsCodeWindow)
+            if (attachedVsCodeWindow != managedWindow.Handle)
             {
-                attachedVsCodeWindow = vsCodeWindow;
-                overlayWindow!.AttachTo(vsCodeWindow);
-                logger.Info("Attached switcher overlay to a supported Visual Studio Code window.");
+                attachedVsCodeWindow = managedWindow.Handle;
+                overlayWindow!.AttachTo(managedWindow.Handle);
+                logger.Info("Attached switcher overlay to the verified managed Visual Studio Code window.");
             }
 
-            overlayWindow!.UpdatePlacement(vsCodeWindow);
+            overlayWindow!.UpdatePlacement(managedWindow.Handle);
         }
         else
         {
-            if (attachedVsCodeWindow != IntPtr.Zero)
-            {
-                logger.Info("The attached Visual Studio Code window is unavailable; returning to floating mode.");
-            }
-
             attachedVsCodeWindow = IntPtr.Zero;
             overlayWindow!.ShowFloating();
         }
@@ -493,33 +605,117 @@ internal sealed class OverlayController : IDisposable
         trayIcon?.UpdateOverlayState(overlayWindow.IsVisible);
     }
 
-    private IntPtr FindVsCodeWindow()
-    {
-        bool canSearch = settings.AutomaticallyDetectVsCode
-            || !string.IsNullOrWhiteSpace(settings.CustomVsCodeExecutablePath);
-        return canSearch
-            ? windowFinder.FindMainWindow(
-                settings.CustomVsCodeExecutablePath,
-                settings.AutomaticallyDetectVsCode)
-            : IntPtr.Zero;
-    }
-
-    private void TrackVsCodeWindowSafely()
+    private ManagedVsCodeObservation? ObserveManagedInstanceSafely()
     {
         try
         {
-            UpdateOverlayHost();
+            ManagedVsCodeInstanceState? state = managedInstanceStore.Read();
+            if (state is null)
+            {
+                return null;
+            }
+
+            ManagedVsCodeObservation? observation = managedRuntime.Observe(state);
+            if (observation is null)
+            {
+                managedInstanceStore.Clear();
+            }
+
+            return observation;
         }
         catch (Exception exception)
         {
-            logger.Error("Visual Studio Code window tracking failed.", exception);
-            if (attachedVsCodeWindow != IntPtr.Zero)
-            {
-                attachedVsCodeWindow = IntPtr.Zero;
-                overlayWindow?.ShowFloating();
-            }
+            logger.Error("Managed Visual Studio Code window tracking failed.", exception);
+            return null;
         }
     }
+
+    private ProfileActivationService CreateActivationService()
+        => new(
+            settings.CodexProfileRoot,
+            protectedPaths,
+            executableLocator,
+            managedRuntime,
+            managedInstanceStore,
+            activeProfileStore,
+            workspaceHistory,
+            extensionManager,
+            launchPlanBuilder);
+
+    private void SelectWorkspaceFolder()
+    {
+        using var dialog = new System.Windows.Forms.FolderBrowserDialog
+        {
+            Description = localizer["SelectWorkspaceFolder"],
+            UseDescriptionForTitle = true,
+            ShowNewFolderButton = false,
+            SelectedPath = Directory.Exists(settings.LastOpenedWorkspace)
+                ? settings.LastOpenedWorkspace
+                : string.Empty,
+        };
+        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+        {
+            settings.LastOpenedWorkspace = Path.GetFullPath(dialog.SelectedPath);
+            workspaceHistory.SaveLastWorkspace(settings.LastOpenedWorkspace);
+            SaveSettings(settings);
+            settingsWindow?.RefreshIntegrationPage();
+        }
+    }
+
+    private void SelectWorkspaceFile()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = localizer["SelectWorkspaceFile"],
+            Filter = "Visual Studio Code workspace (*.code-workspace)|*.code-workspace",
+            CheckFileExists = true,
+            Multiselect = false,
+        };
+        if (dialog.ShowDialog(settingsWindow) == true)
+        {
+            settings.LastOpenedWorkspace = Path.GetFullPath(dialog.FileName);
+            workspaceHistory.SaveLastWorkspace(settings.LastOpenedWorkspace);
+            SaveSettings(settings);
+            settingsWindow?.RefreshIntegrationPage();
+        }
+    }
+
+    private void ClearWorkspaceForNextLaunch()
+    {
+        settings.LastOpenedWorkspace = string.Empty;
+        workspaceHistory.SaveLastWorkspace(null);
+        SaveSettings(settings);
+        settingsWindow?.RefreshIntegrationPage();
+        RestartManagedVsCode();
+    }
+
+    private VsCodeIntegrationSnapshot GetIntegrationSnapshot()
+    {
+        string? executable = executableLocator.Locate(settings.CustomVsCodeExecutablePath);
+        ManagedVsCodeObservation? observation = ObserveManagedInstanceSafely();
+        return new VsCodeIntegrationSnapshot(
+            executable,
+            observation is null ? ManagedInstanceStatus.NotRunning : ManagedInstanceStatus.Running,
+            activeProfileStore.Read(),
+            lastExtensionActionStatus is { State: not CodexExtensionState.Installed }
+                ? lastExtensionActionStatus
+                : extensionManager.Detect(settings.DedicatedVsCodeExtensionsDirectory),
+            FirstNonEmpty(settings.LastOpenedWorkspace, workspaceHistory.ReadLastWorkspace()));
+    }
+
+    private void ShowIntegrationError(string messageKey)
+    {
+        string message = localizer[messageKey];
+        overlayWindow?.ShowError(message);
+        trayIcon?.ShowBalloon("Codex VS Code Switcher", message);
+    }
+
+    private static string? FirstNonEmpty(string? first, string? second)
+        => !string.IsNullOrWhiteSpace(first)
+            ? first
+            : !string.IsNullOrWhiteSpace(second)
+                ? second
+                : null;
 
     private void OpenFolder(string folder)
     {

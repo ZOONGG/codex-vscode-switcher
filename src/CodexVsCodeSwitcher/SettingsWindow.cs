@@ -34,6 +34,14 @@ internal sealed class SettingsWindow : Window
     private readonly Action openLogsFolder;
     private readonly Action resetPosition;
     private readonly Action resetSettings;
+    private readonly Action launchManagedVsCode;
+    private readonly Action restartManagedVsCode;
+    private readonly Action installCodexExtension;
+    private readonly Action selectWorkspaceFolder;
+    private readonly Action selectWorkspaceFile;
+    private readonly Action launchEmptyWorkspace;
+    private readonly Func<VsCodeIntegrationSnapshot> getIntegrationSnapshot;
+    private readonly Action openDedicatedVsCodeData;
     private readonly Action exitApplication;
     private readonly Localizer localizer;
     private readonly Grid contentHost = new();
@@ -69,6 +77,14 @@ internal sealed class SettingsWindow : Window
         Action openLogsFolder,
         Action resetPosition,
         Action resetSettings,
+        Action launchManagedVsCode,
+        Action restartManagedVsCode,
+        Action installCodexExtension,
+        Action selectWorkspaceFolder,
+        Action selectWorkspaceFile,
+        Action launchEmptyWorkspace,
+        Func<VsCodeIntegrationSnapshot> getIntegrationSnapshot,
+        Action openDedicatedVsCodeData,
         Action exitApplication)
     {
         this.settings = settings;
@@ -90,6 +106,14 @@ internal sealed class SettingsWindow : Window
         this.openLogsFolder = openLogsFolder;
         this.resetPosition = resetPosition;
         this.resetSettings = resetSettings;
+        this.launchManagedVsCode = launchManagedVsCode;
+        this.restartManagedVsCode = restartManagedVsCode;
+        this.installCodexExtension = installCodexExtension;
+        this.selectWorkspaceFolder = selectWorkspaceFolder;
+        this.selectWorkspaceFile = selectWorkspaceFile;
+        this.launchEmptyWorkspace = launchEmptyWorkspace;
+        this.getIntegrationSnapshot = getIntegrationSnapshot;
+        this.openDedicatedVsCodeData = openDedicatedVsCodeData;
         this.exitApplication = exitApplication;
 
         Title = "Codex VS Code Switcher";
@@ -147,6 +171,14 @@ internal sealed class SettingsWindow : Window
         }
 
         Rebuild();
+    }
+
+    public void RefreshIntegrationPage()
+    {
+        if (page == SettingsPage.Integration)
+        {
+            Rebuild();
+        }
     }
 
     private UIElement BuildShell()
@@ -369,25 +401,56 @@ internal sealed class SettingsWindow : Window
     private UIElement BuildIntegrationPage()
     {
         var stack = PageStack();
+        VsCodeIntegrationSnapshot snapshot = getIntegrationSnapshot();
+        string extensionStatus = snapshot.ExtensionStatus.State switch
+        {
+            CodexExtensionState.Installed when !string.IsNullOrWhiteSpace(snapshot.ExtensionStatus.Version) =>
+                string.Format(
+                    CultureInfo.CurrentCulture,
+                    localizer["CodexExtensionInstalledVersion"],
+                    snapshot.ExtensionStatus.Version),
+            CodexExtensionState.Installed => localizer["CodexExtensionInstalled"],
+            CodexExtensionState.Missing => localizer["CodexExtensionMissing"],
+            CodexExtensionState.VsCodeCliUnavailable => localizer["VsCodeCliUnavailable"],
+            _ => localizer["CodexExtensionInstallFailed"],
+        };
+        string managedStatus = snapshot.ManagedStatus == ManagedInstanceStatus.Running
+            ? localizer["ManagedVsCodeRunning"]
+            : localizer["ManagedVsCodeNotRunning"];
         stack.Children.Add(Card(
             new TextBlock
             {
-                Text = localizer["VsCodeIntegrationPrepared"],
+                Text = managedStatus,
                 FontSize = 16,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = Brush("SuccessBrush"),
+                Foreground = snapshot.ManagedStatus == ManagedInstanceStatus.Running
+                    ? Brush("SuccessBrush")
+                    : Brush("MutedTextBrush"),
                 TextWrapping = TextWrapping.Wrap,
             },
             new TextBlock
             {
-                Text = localizer["VsCodeIntegrationPreparedHelp"],
+                Text = string.Format(
+                    CultureInfo.CurrentCulture,
+                    localizer["ActiveProfileStatus"],
+                    snapshot.ActiveProfileId ?? localizer["None"]),
                 Foreground = Brush("MutedTextBrush"),
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 8, 0, 0),
             },
             new TextBlock
             {
-                Text = localizer["UpdateChannelNotConfigured"],
+                Text = extensionStatus,
+                Foreground = Brush("MutedTextBrush"),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 8, 0, 0),
+            },
+            new TextBlock
+            {
+                Text = string.Format(
+                    CultureInfo.CurrentCulture,
+                    localizer["DetectedVsCodeExecutable"],
+                    snapshot.DetectedExecutablePath ?? localizer["NotDetected"]),
                 Foreground = Brush("MutedTextBrush"),
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 8, 0, 0),
@@ -395,12 +458,37 @@ internal sealed class SettingsWindow : Window
         stack.Children.Add(Card(
             SettingCheck(localizer["AutomaticVsCodeDetection"], localizer["AutomaticVsCodeDetectionHelp"], settings.AutomaticallyDetectVsCode, value => settings.AutomaticallyDetectVsCode = value),
             PathInput(localizer["VsCodeExecutable"], localizer["VsCodeExecutableHelp"], settings.CustomVsCodeExecutablePath, value => settings.CustomVsCodeExecutablePath = value),
-            PathInput(localizer["VsCodeUserData"], localizer["VsCodeUserDataHelp"], settings.DedicatedVsCodeUserDataDirectory, value => settings.DedicatedVsCodeUserDataDirectory = value),
-            PathInput(localizer["VsCodeExtensions"], localizer["VsCodeExtensionsHelp"], settings.DedicatedVsCodeExtensionsDirectory, value => settings.DedicatedVsCodeExtensionsDirectory = value),
-            PathInput(localizer["CodexProfileRoot"], localizer["CodexProfileRootHelp"], settings.CodexProfileRoot, value => settings.CodexProfileRoot = value),
+            ReadOnlyPath(localizer["VsCodeUserData"], localizer["VsCodeUserDataHelp"], settings.DedicatedVsCodeUserDataDirectory),
+            ReadOnlyPath(localizer["VsCodeExtensions"], localizer["VsCodeExtensionsHelp"], settings.DedicatedVsCodeExtensionsDirectory),
+            ReadOnlyPath(localizer["CodexProfileRoot"], localizer["CodexProfileRootHelp"], settings.CodexProfileRoot),
             PathInput(localizer["LastWorkspace"], localizer["LastWorkspaceHelp"], settings.LastOpenedWorkspace, value => settings.LastOpenedWorkspace = value),
             SettingCheck(localizer["ReopenLastWorkspace"], localizer["ReopenLastWorkspaceHelp"], settings.ReopenLastWorkspaceAfterSwitch, value => settings.ReopenLastWorkspaceAfterSwitch = value),
-            SettingCheck(localizer["FutureOverlayAttachment"], localizer["FutureOverlayAttachmentHelp"], settings.AttachOverlayToVsCode, value => settings.AttachOverlayToVsCode = value)));
+            SettingCheck(localizer["LaunchCodexSidebar"], localizer["LaunchCodexSidebarHelp"], settings.LaunchCodexSidebarOnStartup, value => settings.LaunchCodexSidebarOnStartup = value),
+            NumberInput(localizer["GracefulCloseTimeout"], localizer["GracefulCloseTimeoutHelp"], settings.GracefulCloseTimeoutSeconds, value => settings.GracefulCloseTimeoutSeconds = (int)value, 1, 5, 300),
+            SettingCheck(localizer["ShowOnlyWithManagedVsCode"], localizer["ShowOnlyWithManagedVsCodeHelp"], settings.ShowOverlayOnlyWithManagedVsCode, value => settings.ShowOverlayOnlyWithManagedVsCode = value),
+            SettingCheck(localizer["AttachOverlayToManagedVsCode"], localizer["AttachOverlayToManagedVsCodeHelp"], settings.AttachOverlayToVsCode, value => settings.AttachOverlayToVsCode = value)));
+        var workspaceText = new TextBlock
+        {
+            Text = ShortenPath(snapshot.WorkspacePath) ?? localizer["EmptyWindow"],
+            ToolTip = snapshot.WorkspacePath,
+            Foreground = Brush("StrongTextBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 8),
+        };
+        stack.Children.Add(Card(
+            SectionHeader(localizer["Workspace"], localizer["WorkspaceHelp"]),
+            workspaceText,
+            CommandGrid(
+                (localizer["SelectWorkspaceFolder"], "M 3 7 L 9 7 L 11 9 L 21 9 L 21 19 L 3 19 Z", selectWorkspaceFolder, false),
+                (localizer["SelectWorkspaceFile"], "M 5 3 L 15 3 L 20 8 L 20 21 L 5 21 Z", selectWorkspaceFile, false),
+                (localizer["OpenWorkspaceInManagedVsCode"], "M 7 5 L 19 12 L 7 19 Z", restartManagedVsCode, true),
+                (localizer["OpenEmptyWindow"], "M 4 4 L 20 4 L 20 20 L 4 20 Z", launchEmptyWorkspace, false))));
+        stack.Children.Add(Card(CommandGrid(
+            (localizer["LaunchManagedVsCode"], "M 7 5 L 19 12 L 7 19 Z", launchManagedVsCode, true),
+            (localizer["RestartManagedVsCode"], "M 19 8 A 8 8 0 1 0 20 14 M 19 8 L 19 3 M 19 8 L 14 8", restartManagedVsCode, false),
+            (localizer["InstallCodexExtension"], "M 12 3 L 12 16 M 7 11 L 12 16 L 17 11 M 5 20 L 19 20", installCodexExtension, false),
+            (localizer["OpenDedicatedVsCodeData"], "M 3 7 L 9 7 L 11 9 L 21 9 L 21 19 L 3 19 Z", openDedicatedVsCodeData, false),
+            (localizer["OpenProfileRoot"], "M 3 7 L 9 7 L 11 9 L 21 9 L 21 19 L 3 19 Z", openProfilesFolder, false))));
         return stack;
     }
 
@@ -1086,6 +1174,16 @@ internal sealed class SettingsWindow : Window
         return SettingRow(title, subtitle, box);
     }
 
+    private UIElement ReadOnlyPath(string title, string subtitle, string value)
+        => SettingRow(title, subtitle, new TextBox
+        {
+            Text = value,
+            MinWidth = 360,
+            IsReadOnly = true,
+            IsTabStop = true,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+        });
+
     private UIElement HotkeyRow(string title, HotkeyGesture? value, Action<HotkeyGesture?> setter)
     {
         var button = new Button { Content = value?.ToString() ?? localizer["None"], MinWidth = 190 };
@@ -1351,6 +1449,44 @@ internal sealed class SettingsWindow : Window
     }
 
     private StackPanel PageStack() => new() { Margin = new Thickness(0, 0, 12, 0) };
+
+    private UIElement SectionHeader(string title, string subtitle)
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontSize = 16,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Brush("StrongTextBrush"),
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = subtitle,
+            Foreground = Brush("MutedTextBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 4, 0, 0),
+        });
+        return panel;
+    }
+
+    private static string? ShortenPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        string fullPath = Path.GetFullPath(path);
+        if (fullPath.Length <= 64)
+        {
+            return fullPath;
+        }
+
+        string name = Path.GetFileName(fullPath);
+        string? parent = Path.GetFileName(Path.GetDirectoryName(fullPath));
+        return $"…\\{parent}\\{name}";
+    }
 
     private Border Card(params UIElement[] children)
     {

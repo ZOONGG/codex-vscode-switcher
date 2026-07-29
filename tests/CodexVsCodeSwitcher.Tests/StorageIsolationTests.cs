@@ -1,4 +1,5 @@
 using CodexVsCodeSwitcher.Core.Services;
+using CodexVsCodeSwitcher.Core.Models;
 
 namespace CodexVsCodeSwitcher.Tests;
 
@@ -47,7 +48,30 @@ public sealed class StorageIsolationTests
     }
 
     [Fact]
-    public async Task BootstrapActivation_DoesNotCreateOrModifyAuthenticationFiles()
+    public void Settings_EnforceProductOwnedVsCodeAndProfileRoots()
+    {
+        using var temp = new TempDirectory();
+        var layout = new CodexVsCodeStorageLayout(
+            Path.Combine(temp.Path, "user"),
+            Path.Combine(temp.Path, "local"));
+        var service = new SettingsService(layout, ProtectedPathPolicy.FromLayout(layout));
+        var settings = new OverlaySettings
+        {
+            DedicatedVsCodeUserDataDirectory = Path.Combine(temp.Path, "other-data"),
+            DedicatedVsCodeExtensionsDirectory = Path.Combine(temp.Path, "other-extensions"),
+            CodexProfileRoot = Path.Combine(temp.Path, "other-profiles"),
+        };
+
+        service.Save(settings);
+
+        Assert.Equal(layout.VsCodeUserDataDirectory, settings.DedicatedVsCodeUserDataDirectory);
+        Assert.Equal(layout.VsCodeExtensionsDirectory, settings.DedicatedVsCodeExtensionsDirectory);
+        Assert.Equal(layout.ProfilesDirectory, settings.CodexProfileRoot);
+        Assert.True(settings.ShowOverlayOnlyWithManagedVsCode);
+    }
+
+    [Fact]
+    public void LaunchPlanning_DoesNotCreateOrModifyAuthenticationFiles()
     {
         using var temp = new TempDirectory();
         string profile = Path.Combine(temp.Path, "profile");
@@ -56,10 +80,13 @@ public sealed class StorageIsolationTests
         File.WriteAllText(auth, "dummy-auth");
         DateTime before = File.GetLastWriteTimeUtc(auth);
 
-        BootstrapActivationResult result = await new BootstrapProfileActivationService().ActivateAsync("work");
+        _ = new VsCodeLaunchPlanBuilder().Build(
+            Path.Combine(temp.Path, "Code.exe"),
+            Path.Combine(temp.Path, "data"),
+            Path.Combine(temp.Path, "extensions"),
+            profile,
+            workspacePath: null);
 
-        Assert.False(result.Succeeded);
-        Assert.Equal(BootstrapProfileActivationService.MessageKey, result.MessageKey);
         Assert.Equal("dummy-auth", File.ReadAllText(auth));
         Assert.Equal(before, File.GetLastWriteTimeUtc(auth));
     }

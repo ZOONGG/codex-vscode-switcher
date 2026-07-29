@@ -41,7 +41,7 @@ public sealed class SettingsService
         LastCorruptBackupFile = null;
         if (!File.Exists(settingsFile))
         {
-            return new OverlaySettings();
+            return Normalize(new OverlaySettings());
         }
 
         try
@@ -53,12 +53,12 @@ public sealed class SettingsService
         {
             PreserveCorruptSettings();
             LastLoadWarningKey = "CorruptSettingsRecovered";
-            return new OverlaySettings();
+            return Normalize(new OverlaySettings());
         }
         catch (IOException)
         {
             LastLoadWarningKey = "SettingsCouldNotBeRead";
-            return new OverlaySettings();
+            return Normalize(new OverlaySettings());
         }
     }
 
@@ -123,15 +123,12 @@ public sealed class SettingsService
         settings.LowWarningThresholdPercent = Math.Clamp(settings.LowWarningThresholdPercent, 1, 99);
         settings.ActiveProfileRefreshIntervalMinutes = Math.Clamp(settings.ActiveProfileRefreshIntervalMinutes, 10, 1440);
         settings.InactiveProfileRefreshIntervalMinutes = Math.Clamp(settings.InactiveProfileRefreshIntervalMinutes, 10, 1440);
+        settings.GracefulCloseTimeoutSeconds = Math.Clamp(settings.GracefulCloseTimeoutSeconds, 5, 300);
         if (layout is not null)
         {
-            settings.DedicatedVsCodeUserDataDirectory = NormalizeConfiguredPath(
-                settings.DedicatedVsCodeUserDataDirectory,
-                layout.VsCodeUserDataDirectory);
-            settings.DedicatedVsCodeExtensionsDirectory = NormalizeConfiguredPath(
-                settings.DedicatedVsCodeExtensionsDirectory,
-                layout.VsCodeExtensionsDirectory);
-            settings.CodexProfileRoot = NormalizeConfiguredPath(settings.CodexProfileRoot, layout.ProfilesDirectory);
+            settings.DedicatedVsCodeUserDataDirectory = layout.VsCodeUserDataDirectory;
+            settings.DedicatedVsCodeExtensionsDirectory = layout.VsCodeExtensionsDirectory;
+            settings.CodexProfileRoot = layout.ProfilesDirectory;
             settings.CustomVsCodeExecutablePath = NormalizeOptionalPath(settings.CustomVsCodeExecutablePath);
             settings.LastOpenedWorkspace = NormalizeOptionalPath(settings.LastOpenedWorkspace);
 
@@ -169,9 +166,6 @@ public sealed class SettingsService
         {
         }
     }
-
-    private static string NormalizeConfiguredPath(string value, string fallback)
-        => string.IsNullOrWhiteSpace(value) ? fallback : Path.GetFullPath(value.Trim());
 
     private static string NormalizeOptionalPath(string value)
         => string.IsNullOrWhiteSpace(value) ? string.Empty : Path.GetFullPath(value.Trim());

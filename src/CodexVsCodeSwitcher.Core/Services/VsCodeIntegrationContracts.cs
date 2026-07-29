@@ -35,6 +35,6 @@ public interface IWorkspaceHistoryService
 
 public sealed record VsCodeIntegrationStatus(bool IsPrepared, bool IsImplemented, string MessageKey)
 {
-    public static VsCodeIntegrationStatus Bootstrap { get; } =
-        new(true, false, "VsCodeIntegrationPrepared");
+    public static VsCodeIntegrationStatus Ready { get; } =
+        new(true, true, "ManagedVsCodeReady");
 }

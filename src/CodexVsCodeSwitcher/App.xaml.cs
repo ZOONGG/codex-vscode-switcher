@@ -117,6 +117,12 @@ public partial class App : Application
             var activeProfileStore = new ActiveProfileStore(paths.ActiveProfileFile, protectedPaths);
             var settingsService = new SettingsService(paths, protectedPaths);
             var backupMaintenance = new MinimalBackupService(paths, protectedPaths, logger);
+            var launchPlanBuilder = new VsCodeLaunchPlanBuilder();
+            var processRunner = new ProcessCommandRunner();
+            var extensionManager = new CodexExtensionManager(
+                launchPlanBuilder,
+                processRunner,
+                protectedPaths);
             backupMaintenance.CleanupRetention();
             controller = new OverlayController(
                 paths,
@@ -124,7 +130,12 @@ public partial class App : Application
                 profileManager,
                 activeProfileStore,
                 settingsService,
-                new BootstrapProfileActivationService(),
+                VsCodeExecutableLocator.FromEnvironment(),
+                new ManagedVsCodeRuntime(),
+                new ManagedInstanceStore(paths.ManagedInstanceMetadataFile, protectedPaths),
+                new WorkspaceHistoryService(paths.LastWorkspaceMetadataFile, protectedPaths),
+                extensionManager,
+                launchPlanBuilder,
                 new StartupRegistrationService(),
                 logger,
                 backupMaintenance);

@@ -49,6 +49,12 @@ internal sealed class TrayIconService : IDisposable
 
     public event Action? SettingsRequested;
 
+    public event Action? LaunchManagedVsCodeRequested;
+
+    public event Action? RestartManagedVsCodeRequested;
+
+    public event Action? InstallCodexExtensionRequested;
+
     public event Action<bool>? StartWithWindowsChanged;
 
     public event Action<string>? ProfileSelected;
@@ -135,7 +141,14 @@ internal sealed class TrayIconService : IDisposable
     private void RebuildMenu()
     {
         menu.Items.Clear();
-        menu.Items.Add(localizer["OpenCodex"], null, (_, _) => OpenCodexRequested?.Invoke());
+        menu.Items.Add(localizer["LaunchManagedVsCode"], null, (_, _) => LaunchManagedVsCodeRequested?.Invoke());
+        var restart = new ToolStripMenuItem(localizer["RestartManagedVsCode"])
+        {
+            Enabled = !string.IsNullOrWhiteSpace(activeProfile),
+        };
+        restart.Click += (_, _) => RestartManagedVsCodeRequested?.Invoke();
+        menu.Items.Add(restart);
+        menu.Items.Add(localizer["InstallCodexExtension"], null, (_, _) => InstallCodexExtensionRequested?.Invoke());
         menu.Items.Add(overlayVisible ? localizer["HideSwitcher"] : localizer["ShowSwitcher"], null, (_, _) => ToggleOverlayRequested?.Invoke());
 
         var profilesMenu = new ToolStripMenuItem(localizer["Profiles"]);

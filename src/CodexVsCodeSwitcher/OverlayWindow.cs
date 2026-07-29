@@ -28,6 +28,8 @@ internal sealed class OverlayWindow : Window
     private readonly Border shell = new();
     private readonly Popup compactPopup = new() { AllowsTransparency = true, StaysOpen = false, Placement = PlacementMode.Bottom };
     private readonly List<Button> profileButtons = [];
+    private readonly Dictionary<string, string> profileActivationStatusKeys =
+        new(StringComparer.OrdinalIgnoreCase);
     private HwndSource? hwndSource;
     private IReadOnlyList<ProfileInfo> profiles = [];
     private string? activeProfile;
@@ -35,6 +37,9 @@ internal sealed class OverlayWindow : Window
     private ProfileStatusDocument? statusDocument;
     private IntPtr ownerHwnd;
     private bool isSwitching;
+    private bool managedVsCodeRunning;
+    private string? switchingProfileDisplayName;
+    private string? switchingStatusOverride;
     private OverlayDisplayMode resolvedAutoMode = OverlayDisplayMode.Expanded;
     private OverlayDisplayMode currentMode = OverlayDisplayMode.Expanded;
     private Rect lastClientBounds = Rect.Empty;
@@ -278,9 +283,11 @@ internal sealed class OverlayWindow : Window
         }
     }
 
-    public void SetSwitching(bool switching)
+    public void SetSwitching(bool switching, string? profileDisplayName)
     {
         isSwitching = switching;
+        switchingProfileDisplayName = switching ? profileDisplayName : null;
+        switchingStatusOverride = null;
         compactPopup.IsOpen = false;
         foreach (Button button in profileButtons)
         {
@@ -289,6 +296,36 @@ internal sealed class OverlayWindow : Window
                 item => item.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase));
             button.IsEnabled = !switching && profile?.IsEligibleForSwitching == true;
         }
+
+        RebuildContent();
+    }
+
+    public void SetSwitchingStatus(string status)
+    {
+        if (!isSwitching)
+        {
+            return;
+        }
+
+        switchingStatusOverride = status;
+        RebuildContent();
+    }
+
+    public void SetProfileActivationStatus(string profileId, string messageKey)
+    {
+        profileActivationStatusKeys[ProfileName.RequireValid(profileId)] = messageKey;
+        RebuildContent();
+    }
+
+    public void SetManagedVsCodeRunning(bool isRunning)
+    {
+        if (managedVsCodeRunning == isRunning)
+        {
+            return;
+        }
+
+        managedVsCodeRunning = isRunning;
+        RebuildContent();
     }
 
     public void ShowNotification(string message) => ToastWindow.Show(ownerHwnd, message, isError: false);
@@ -364,7 +401,12 @@ internal sealed class OverlayWindow : Window
 
         var name = new TextBlock
         {
-            Text = isSwitching ? Localizer?["Switching"] ?? "Switching..." : active?.DisplayName ?? Localizer?["NoReadyProfiles"] ?? "No ready profiles",
+            Text = isSwitching
+                ? switchingStatusOverride ?? string.Format(
+                    CultureInfo.CurrentCulture,
+                    Localizer?["SwitchingToProfile"] ?? "Switching to {0}…",
+                    switchingProfileDisplayName ?? string.Empty)
+                : active?.DisplayName ?? Localizer?["NoReadyProfiles"] ?? "No ready profiles",
             Foreground = FindBrush("StrongTextBrush"),
             FontSize = 15,
             VerticalAlignment = VerticalAlignment.Center,
@@ -409,7 +451,22 @@ internal sealed class OverlayWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        if (profiles.Count == 0)
+        if (isSwitching)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = switchingStatusOverride ?? string.Format(
+                    CultureInfo.CurrentCulture,
+                    Localizer?["SwitchingToProfile"] ?? "Switching to {0}…",
+                    switchingProfileDisplayName ?? string.Empty),
+                Foreground = FindBrush("StrongTextBrush"),
+                FontSize = 14,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(10, 0, 14, 0),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            });
+        }
+        else if (profiles.Count == 0)
         {
             panel.Children.Add(new TextBlock
             {
@@ -467,7 +524,7 @@ internal sealed class OverlayWindow : Window
             {
                 item.ToolTip = BuildUsageToolTip(profile.Name);
             }
-            item.ToolTip = BuildProfileStorageToolTip(profile);
+            item.ToolTip = BuildProfileToolTip(profile);
             item.IsEnabled = !isActive && !isSwitching && profile.IsEligibleForSwitching;
             string name = profile.Name;
             item.Click += (_, _) =>
@@ -547,7 +604,7 @@ internal sealed class OverlayWindow : Window
             Background = isActive ? FindBrush("TabActiveBrush") : FindBrush("TabBackgroundBrush"),
             Cursor = isActive ? Cursors.Arrow : Cursors.Hand,
             Tag = profile.Name,
-            ToolTip = BuildProfileStorageToolTip(profile),
+            ToolTip = BuildProfileToolTip(profile),
             IsEnabled = !isSwitching && profile.IsEligibleForSwitching,
         };
 
@@ -578,6 +635,21 @@ internal sealed class OverlayWindow : Window
             FormatBytes(profile.DirectorySizeBytes),
             profile.IgnoredRuntimeFileCount);
         return profile.DisplayName + Environment.NewLine + summary;
+    }
+
+    private string BuildProfileToolTip(ProfileInfo profile)
+    {
+        string storage = BuildProfileStorageToolTip(profile);
+        if (string.Equals(profile.Name, activeProfile, StringComparison.OrdinalIgnoreCase))
+        {
+            return storage + Environment.NewLine + (managedVsCodeRunning
+                ? Localizer?["ActiveInVsCode"] ?? "Active in VS Code"
+                : Localizer?["ManagedVsCodeNotRunning"] ?? "Managed VS Code is not running");
+        }
+
+        return profileActivationStatusKeys.TryGetValue(profile.Name, out string? key)
+            ? storage + Environment.NewLine + (Localizer?[key] ?? key)
+            : storage + Environment.NewLine + (Localizer?["ProfileAvailable"] ?? "Available");
     }
 
     private static string FormatBytes(long bytes)

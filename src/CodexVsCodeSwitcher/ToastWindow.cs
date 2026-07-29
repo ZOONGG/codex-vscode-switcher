@@ -46,7 +46,7 @@ internal sealed class ToastWindow : Window
         var toast = new ToastWindow(message, isError);
         var helper = new WindowInteropHelper(toast);
         _ = helper.EnsureHandle();
-        if (owner != IntPtr.Zero)
+        if (owner != IntPtr.Zero && NativeMethods.IsWindow(owner))
         {
             helper.Owner = owner;
             if (TryGetClientBounds(toast, owner, out Rect bounds))

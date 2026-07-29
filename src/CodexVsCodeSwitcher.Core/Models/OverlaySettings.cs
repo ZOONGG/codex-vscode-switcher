@@ -38,7 +38,13 @@ public sealed class OverlaySettings
 
     public bool ReopenLastWorkspaceAfterSwitch { get; set; } = true;
 
-    public bool AttachOverlayToVsCode { get; set; }
+    public bool AttachOverlayToVsCode { get; set; } = true;
+
+    public bool ShowOverlayOnlyWithManagedVsCode { get; set; } = true;
+
+    public bool LaunchCodexSidebarOnStartup { get; set; } = true;
+
+    public int GracefulCloseTimeoutSeconds { get; set; } = 30;
 
     public HotkeySettings Hotkeys { get; set; } = HotkeySettings.CreateDefault();
 
