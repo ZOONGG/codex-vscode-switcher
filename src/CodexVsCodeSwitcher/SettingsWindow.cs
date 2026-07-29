@@ -15,6 +15,7 @@ namespace CodexVsCodeSwitcher;
 
 internal sealed class SettingsWindow : Window
 {
+    private readonly OverlayStateTransitionService overlayStateTransitions = new();
     private static readonly FontFamily EmojiFont = new("Segoe UI Emoji");
     private readonly OverlaySettings settings;
     private readonly Action<OverlaySettings> save;
@@ -408,7 +409,11 @@ internal sealed class SettingsWindow : Window
         var stack = PageStack();
         var rows = new List<UIElement>
         {
-            EnumCombo(localizer["DisplayMode"], localizer["DisplayModeHelp"], settings.DisplayMode, value => settings.DisplayMode = value),
+            EnumCombo(
+                localizer["DisplayMode"],
+                localizer["DisplayModeHelp"],
+                settings.DisplayMode,
+                value => overlayStateTransitions.SetDisplayMode(settings, value)),
             EnumCombo(localizer["PositionPreset"], localizer["PositionPresetHelp"], settings.PositionPreset, value => settings.PositionPreset = value, Rebuild),
         };
 

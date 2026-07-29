@@ -954,8 +954,7 @@ internal sealed class OverlayWindow : Window
     private static void ApplyToolWindowStyle(IntPtr handle)
     {
         long exStyle = NativeMethods.GetWindowLongPtr(handle, NativeMethods.GwlExStyle).ToInt64();
-        exStyle |= NativeMethods.WsExToolWindow | NativeMethods.WsExNoActivate;
-        exStyle &= ~(NativeMethods.WsExAppWindow | NativeMethods.WsExTransparent);
+        exStyle = OverlayWindowStylePolicy.ReturnToInteractive(exStyle);
         NativeMethods.SetWindowLongPtr(handle, NativeMethods.GwlExStyle, (nint)exStyle);
     }
 
