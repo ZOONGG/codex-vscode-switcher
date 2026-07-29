@@ -23,6 +23,8 @@ internal sealed class OverlayWindow : Window
     private readonly OverlaySettings settings;
     private readonly SafeLogger logger;
     private readonly OverlayLayoutService layoutService = new();
+    private readonly FloatingOverlayPlacementService floatingPlacementService = new();
+    private readonly OverlayDragSession dragSession = new();
     private readonly Border shell = new();
     private readonly Popup compactPopup = new() { AllowsTransparency = true, StaysOpen = false, Placement = PlacementMode.Bottom };
     private readonly List<Button> profileButtons = [];
@@ -32,9 +34,7 @@ internal sealed class OverlayWindow : Window
     private string? recommendedProfile;
     private ProfileStatusDocument? statusDocument;
     private IntPtr ownerHwnd;
-    private bool isDragging;
     private bool isSwitching;
-    private Point dragOffset;
     private OverlayDisplayMode resolvedAutoMode = OverlayDisplayMode.Expanded;
     private OverlayDisplayMode currentMode = OverlayDisplayMode.Expanded;
     private Rect lastClientBounds = Rect.Empty;
@@ -63,9 +63,10 @@ internal sealed class OverlayWindow : Window
 
         Content = shell;
         RebuildContent();
-        MouseLeftButtonDown += OnMouseLeftButtonDown;
-        MouseMove += OnMouseMove;
-        MouseLeftButtonUp += OnMouseLeftButtonUp;
+        PreviewMouseLeftButtonDown += OnMouseLeftButtonDown;
+        PreviewMouseMove += OnMouseMove;
+        PreviewMouseLeftButtonUp += OnMouseLeftButtonUp;
+        LostMouseCapture += OnLostMouseCapture;
         SourceInitialized += OnSourceInitialized;
         IsVisibleChanged += (_, _) =>
         {
@@ -102,25 +103,77 @@ internal sealed class OverlayWindow : Window
 
     public bool AllowAutoShow { get; set; } = true;
 
-    public void AttachTo(IntPtr codexHwnd)
+    public void AttachTo(IntPtr vsCodeHwnd)
     {
-        ownerHwnd = codexHwnd;
+        if (ownerHwnd == vsCodeHwnd)
+        {
+            return;
+        }
+
+        ownerHwnd = vsCodeHwnd;
         var helper = new WindowInteropHelper(this);
         _ = helper.EnsureHandle();
-        helper.Owner = codexHwnd;
+        helper.Owner = vsCodeHwnd;
         ApplyToolWindowStyle(helper.Handle);
+        placementDirty = true;
     }
 
-    public void UpdatePlacement(IntPtr codexHwnd)
+    public void Detach()
     {
-        if (!NativeMethods.IsWindowVisible(codexHwnd) || NativeMethods.IsIconic(codexHwnd))
+        if (ownerHwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var helper = new WindowInteropHelper(this);
+        _ = helper.EnsureHandle();
+        helper.Owner = IntPtr.Zero;
+        ownerHwnd = IntPtr.Zero;
+        lastClientBounds = Rect.Empty;
+        placementDirty = true;
+    }
+
+    public void ShowFloating()
+    {
+        Detach();
+        ApplyFloatingDisplayMode();
+        if (!IsVisible)
+        {
+            Show();
+        }
+
+        ApplyFloatingPlacement();
+    }
+
+    public void ResetFloatingPosition()
+    {
+        Detach();
+        ApplyFloatingDisplayMode();
+        if (!IsVisible)
+        {
+            Show();
+        }
+
+        UpdateLayout();
+        (double width, double height) = GetPhysicalWindowSize();
+        FloatingOverlayPlacement placement = floatingPlacementService.Reset(
+            width,
+            height,
+            DisplayWorkAreaProvider.GetAll());
+        PersistFloatingPlacement(placement);
+        SetPhysicalPosition(placement.Left, placement.Top, showWindow: true);
+    }
+
+    public void UpdatePlacement(IntPtr vsCodeHwnd)
+    {
+        if (!NativeMethods.IsWindowVisible(vsCodeHwnd) || NativeMethods.IsIconic(vsCodeHwnd))
         {
             Hide();
             compactPopup.IsOpen = false;
             return;
         }
 
-        if (!TryGetClientBounds(codexHwnd, out Rect clientBounds))
+        if (!TryGetClientBounds(vsCodeHwnd, out Rect clientBounds))
         {
             Hide();
             compactPopup.IsOpen = false;
@@ -242,7 +295,24 @@ internal sealed class OverlayWindow : Window
     public void ApplySettings()
     {
         ApplyScale();
-        RebuildContent();
+        if (ownerHwnd == IntPtr.Zero)
+        {
+            ApplyFloatingDisplayMode();
+            RebuildContent();
+            if (IsVisible)
+            {
+                ApplyFloatingPlacement();
+            }
+        }
+        else
+        {
+            ApplyAttachedDisplayMode(lastClientBounds.Width);
+            RebuildContent();
+            if (IsVisible)
+            {
+                UpdatePlacement(ownerHwnd);
+            }
+        }
     }
 
     private void RebuildContent()
@@ -850,50 +920,232 @@ internal sealed class OverlayWindow : Window
     {
         long exStyle = NativeMethods.GetWindowLongPtr(handle, NativeMethods.GwlExStyle).ToInt64();
         exStyle |= NativeMethods.WsExToolWindow | NativeMethods.WsExNoActivate;
-        exStyle &= ~NativeMethods.WsExAppWindow;
+        exStyle &= ~(NativeMethods.WsExAppWindow | NativeMethods.WsExTransparent);
         NativeMethods.SetWindowLongPtr(handle, NativeMethods.GwlExStyle, (nint)exStyle);
     }
 
     private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if ((Keyboard.Modifiers & ModifierKeys.Alt) == 0)
+        if (e.ChangedButton != MouseButton.Left
+            || WindowDragHelper.IsInteractive(e.OriginalSource as DependencyObject)
+            || !NativeMethods.GetCursorPos(out NativePoint pointer)
+            || !NativeMethods.GetWindowRect(Handle, out NativeRect windowRect))
+        {
+            return;
+        }
+
+        if (dragSession.TryBegin(
+            isPrimaryButton: true,
+            OverlayPointerRegion.Background,
+            pointer.X,
+            pointer.Y,
+            windowRect.Left,
+            windowRect.Top))
+        {
+            CaptureMouse();
+        }
+    }
+
+    private void OnMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!dragSession.IsCaptured)
+        {
+            return;
+        }
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            ReleaseDragCapture(save: dragSession.HasMoved);
+            return;
+        }
+
+        if (!NativeMethods.GetCursorPos(out NativePoint pointer))
+        {
+            return;
+        }
+
+        OverlayDragMove? move = dragSession.Move(pointer.X, pointer.Y);
+        if (move is null)
         {
             return;
         }
 
         settings.PositionPreset = PositionPreset.Custom;
-        isDragging = true;
-        dragOffset = e.GetPosition(this);
-        CaptureMouse();
-        e.Handled = true;
-    }
-
-    private void OnMouseMove(object sender, MouseEventArgs e)
-    {
-        if (!isDragging || ownerHwnd == IntPtr.Zero || !TryGetClientBounds(ownerHwnd, out Rect clientBounds))
+        if (ownerHwnd == IntPtr.Zero)
         {
-            return;
+            MoveFloating(move, pointer);
+        }
+        else
+        {
+            MoveAttached(move);
         }
 
-        Point screenPoint = PointToScreen(e.GetPosition(this));
-        Point screenDip = DeviceToDip(screenPoint);
-        settings.OffsetX = OverlayLayoutService.Clamp(screenDip.X - clientBounds.Left - dragOffset.X, 0, Math.Max(0, clientBounds.Width - ActualWidth));
-        settings.OffsetY = OverlayLayoutService.Clamp(screenDip.Y - clientBounds.Top - dragOffset.Y, 0, Math.Max(0, clientBounds.Height - ActualHeight));
-        Left = clientBounds.Left + settings.OffsetX;
-        Top = clientBounds.Top + settings.OffsetY;
+        e.Handled = true;
     }
 
     private void OnMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (!isDragging)
+        if (!dragSession.IsCaptured)
         {
             return;
         }
 
-        isDragging = false;
-        ReleaseMouseCapture();
-        TrySaveSettings();
+        bool moved = dragSession.HasMoved;
+        ReleaseDragCapture(save: moved);
+        e.Handled = moved;
     }
+
+    private void OnLostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (dragSession.IsCaptured)
+        {
+            bool moved = dragSession.HasMoved;
+            dragSession.Cancel();
+            if (moved)
+            {
+                TrySaveSettings();
+            }
+        }
+    }
+
+    private void ApplyFloatingDisplayMode()
+    {
+        IReadOnlyList<DisplayWorkArea> workAreas = DisplayWorkAreaProvider.GetAll();
+        DisplayWorkArea monitor = floatingPlacementService.SelectNearest(
+            settings.FloatingLeft ?? workAreas.FirstOrDefault(static area => area.IsPrimary)?.Left ?? 0,
+            settings.FloatingTop ?? workAreas.FirstOrDefault(static area => area.IsPrimary)?.Top ?? 0,
+            workAreas);
+        uint dpi = NativeMethods.GetDpiForWindow(Handle);
+        double availableWidth = monitor.Width * 96d / (dpi == 0 ? 96 : dpi);
+        ApplyAttachedDisplayMode(availableWidth);
+    }
+
+    private void ApplyAttachedDisplayMode(double availableWidth)
+    {
+        double width = double.IsFinite(availableWidth) && availableWidth > 0 ? availableWidth : 1000;
+        OverlayDisplayMode nextMode = layoutService.ResolveDisplayMode(settings.DisplayMode, width, resolvedAutoMode);
+        if (settings.DisplayMode == OverlayDisplayMode.Auto)
+        {
+            resolvedAutoMode = nextMode;
+        }
+
+        if (nextMode != currentMode)
+        {
+            currentMode = nextMode;
+            RebuildContent();
+        }
+    }
+
+    private void ApplyFloatingPlacement()
+    {
+        UpdateLayout();
+        (double width, double height) = GetPhysicalWindowSize();
+        FloatingOverlayPlacement placement = floatingPlacementService.Resolve(
+            settings,
+            width,
+            height,
+            DisplayWorkAreaProvider.GetAll());
+        PersistFloatingPlacement(placement);
+        SetPhysicalPosition(placement.Left, placement.Top, showWindow: true);
+    }
+
+    private void MoveFloating(OverlayDragMove move, NativePoint pointer)
+    {
+        IReadOnlyList<DisplayWorkArea> workAreas = DisplayWorkAreaProvider.GetAll();
+        DisplayWorkArea workArea = floatingPlacementService.SelectNearest(pointer.X, pointer.Y, workAreas);
+        (double width, double height) = GetPhysicalWindowSize();
+        FloatingOverlayPlacement placement = floatingPlacementService.Clamp(
+            move.Left,
+            move.Top,
+            width,
+            height,
+            workArea);
+        PersistFloatingPlacement(placement);
+        SetPhysicalPosition(placement.Left, placement.Top, showWindow: false);
+    }
+
+    private void MoveAttached(OverlayDragMove move)
+    {
+        var origin = new NativePoint();
+        if (!NativeMethods.GetClientRect(ownerHwnd, out NativeRect client)
+            || !NativeMethods.ClientToScreen(ownerHwnd, ref origin)
+            || !NativeMethods.GetWindowRect(Handle, out NativeRect overlay))
+        {
+            return;
+        }
+
+        double width = overlay.Width;
+        double height = overlay.Height;
+        double left = OverlayLayoutService.Clamp(
+            move.Left,
+            origin.X,
+            Math.Max(origin.X, origin.X + client.Width - width));
+        double top = OverlayLayoutService.Clamp(
+            move.Top,
+            origin.Y,
+            Math.Max(origin.Y, origin.Y + client.Height - height));
+        uint dpi = NativeMethods.GetDpiForWindow(ownerHwnd);
+        double dipScale = 96d / (dpi == 0 ? 96 : dpi);
+        settings.OffsetX = (left - origin.X) * dipScale;
+        settings.OffsetY = (top - origin.Y) * dipScale;
+        SetPhysicalPosition(left, top, showWindow: false);
+    }
+
+    private void ReleaseDragCapture(bool save)
+    {
+        bool moved = dragSession.End();
+        if (IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+
+        if (save && moved)
+        {
+            TrySaveSettings();
+        }
+    }
+
+    private (double Width, double Height) GetPhysicalWindowSize()
+    {
+        if (NativeMethods.GetWindowRect(Handle, out NativeRect rect) && rect.Width > 0 && rect.Height > 0)
+        {
+            return (rect.Width, rect.Height);
+        }
+
+        uint dpi = NativeMethods.GetDpiForWindow(Handle);
+        double scale = (dpi == 0 ? 96 : dpi) / 96d;
+        return (
+            Math.Max(FloatingOverlayPlacementService.MinimumVisibleWidth, ActualWidth * scale),
+            Math.Max(FloatingOverlayPlacementService.MinimumVisibleHeight, ActualHeight * scale));
+    }
+
+    private void PersistFloatingPlacement(FloatingOverlayPlacement placement)
+    {
+        settings.FloatingLeft = placement.Left;
+        settings.FloatingTop = placement.Top;
+        settings.FloatingMonitorId = placement.MonitorId;
+    }
+
+    private void SetPhysicalPosition(double left, double top, bool showWindow)
+    {
+        uint flags = NativeMethods.SwpNoSize | NativeMethods.SwpNoZOrder | NativeMethods.SwpNoActivate;
+        if (showWindow)
+        {
+            flags |= NativeMethods.SwpShowWindow;
+        }
+
+        _ = NativeMethods.SetWindowPos(
+            Handle,
+            IntPtr.Zero,
+            ToInt32(left),
+            ToInt32(top),
+            0,
+            0,
+            flags);
+    }
+
+    private static int ToInt32(double value)
+        => (int)Math.Clamp(Math.Round(value), int.MinValue, int.MaxValue);
 
     private void TrySaveSettings()
     {

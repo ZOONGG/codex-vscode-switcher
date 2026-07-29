@@ -68,6 +68,11 @@ internal sealed class OverlayController : IDisposable
             ShowOverlay();
         }
 
+        if (settingsService.LastLoadWarningKey is string warningKey)
+        {
+            overlayWindow?.ShowError(localizer[warningKey]);
+        }
+
         logger.Info("Bootstrap shell started; VS Code backend is disabled.");
     }
 
@@ -329,10 +334,7 @@ internal sealed class OverlayController : IDisposable
     private void ShowOverlay()
     {
         EnsureOverlay();
-        overlayWindow!.Show();
-        Rect workArea = SystemParameters.WorkArea;
-        overlayWindow.Left = Math.Max(workArea.Left + 16, workArea.Right - overlayWindow.Width - 24);
-        overlayWindow.Top = workArea.Top + 24;
+        overlayWindow!.ShowFloating();
         trayIcon?.UpdateOverlayState(true);
     }
 
@@ -404,9 +406,9 @@ internal sealed class OverlayController : IDisposable
 
     private void ResetPosition()
     {
-        settings.PositionPreset = PositionPreset.TopRight;
-        settings.OffsetX = 0;
-        settings.OffsetY = 0;
+        EnsureOverlay();
+        settings.PositionPreset = PositionPreset.Custom;
+        overlayWindow!.ResetFloatingPosition();
         SaveSettings(settings);
         ShowOverlay();
     }

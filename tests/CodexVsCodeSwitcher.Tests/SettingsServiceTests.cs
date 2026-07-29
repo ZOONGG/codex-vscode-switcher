@@ -29,6 +29,9 @@ public sealed class SettingsServiceTests
         {
             DisplayMode = OverlayDisplayMode.Compact,
             PositionPreset = PositionPreset.TopCenter,
+            FloatingLeft = -1220.5,
+            FloatingTop = 80.25,
+            FloatingMonitorId = @"\\.\DISPLAY2",
             Hotkeys = new HotkeySettings
             {
                 ToggleOverlay = new HotkeyGesture(HotkeyModifiers.Control | HotkeyModifiers.Shift, 'K'),
@@ -40,6 +43,9 @@ public sealed class SettingsServiceTests
 
         Assert.Equal(OverlayDisplayMode.Compact, loaded.DisplayMode);
         Assert.Equal(PositionPreset.TopCenter, loaded.PositionPreset);
+        Assert.Equal(-1220.5, loaded.FloatingLeft);
+        Assert.Equal(80.25, loaded.FloatingTop);
+        Assert.Equal(@"\\.\DISPLAY2", loaded.FloatingMonitorId);
         Assert.Equal(new HotkeyGesture(HotkeyModifiers.Control | HotkeyModifiers.Shift, 'K'), loaded.Hotkeys.ToggleOverlay);
         Assert.Equal(new HotkeyGesture(HotkeyModifiers.Alt, '1'), loaded.Hotkeys.ProfileHotkeys[0]);
     }
@@ -164,11 +170,16 @@ public sealed class SettingsServiceTests
         using var temp = new TempDirectory();
         string settingsFile = Path.Combine(temp.Path, "settings.json");
         File.WriteAllText(settingsFile, "{ not valid json");
+        var service = new SettingsService(settingsFile);
 
-        var loaded = new SettingsService(settingsFile).Load();
+        var loaded = service.Load();
 
         Assert.Equal(1, loaded.Scale);
         Assert.Equal(1000, loaded.SettingsWindowWidth);
         Assert.NotNull(loaded.Hotkeys);
+        Assert.Equal("CorruptSettingsRecovered", service.LastLoadWarningKey);
+        Assert.NotNull(service.LastCorruptBackupFile);
+        Assert.True(File.Exists(service.LastCorruptBackupFile));
+        Assert.False(File.Exists(settingsFile));
     }
 }

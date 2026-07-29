@@ -10,6 +10,12 @@ public sealed class OverlaySettings
 
     public double OffsetY { get; set; } = 2;
 
+    public double? FloatingLeft { get; set; }
+
+    public double? FloatingTop { get; set; }
+
+    public string FloatingMonitorId { get; set; } = string.Empty;
+
     public double Scale { get; set; } = 1;
 
     public bool AnimationsEnabled { get; set; } = true;

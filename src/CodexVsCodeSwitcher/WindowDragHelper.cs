@@ -29,7 +29,7 @@ internal static class WindowDragHelper
         };
     }
 
-    private static bool IsInteractive(DependencyObject? source)
+    internal static bool IsInteractive(DependencyObject? source)
     {
         DependencyObject? current = source;
         while (current is not null)
