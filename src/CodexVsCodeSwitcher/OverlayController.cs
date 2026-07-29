@@ -75,7 +75,7 @@ internal sealed class OverlayController : IDisposable
         localizer = new Localizer(settings.Language);
         App.ApplyTheme(settings.Theme);
         var statusStore = new ProfileStatusStore(paths.ProfileStatusFile, protectedPaths);
-        statusService = new ProfileStatusService(statusStore, new CodexCliStatusUsageProvider(), logger);
+        statusService = new ProfileStatusService(statusStore, new UnavailableUsageProvider(), logger);
         statusService.SetStaleThreshold(TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes));
         windowTrackingTimer = new DispatcherTimer(DispatcherPriority.Background)
         {

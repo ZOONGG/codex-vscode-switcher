@@ -12,6 +12,8 @@
 
 Profile validation parses only a bounded top-level authentication JSON for structure. Values are not logged or persisted. Activation passes the profile directory directly as `CODEX_HOME`; it does not copy or merge any profile data.
 
+The production controller uses the unavailable usage provider, so status UI remains independent but does not start a second Codex CLI process with another `CODEX_HOME`.
+
 ## Launch boundary
 
 `VsCodeLaunchPlanBuilder` creates an argument list rather than a shell command. `ProcessCommandRunner` uses `UseShellExecute = false` and `ProcessStartInfo.ArgumentList`. Only the managed launch plan contains a `CODEX_HOME` environment override.

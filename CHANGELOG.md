@@ -41,6 +41,7 @@
 - Ordinary VS Code processes are rejected unless they match the persisted root PID/start time, exact executable, exact dedicated arguments, and verified process tree.
 - Active-profile state is committed only after a visible managed top-level window is verified.
 - Normal switching never force-kills and never copies profile or authentication data.
+- Production usage refresh no longer starts a separate Codex CLI process with `CODEX_HOME`; stored/manual indicators remain available.
 - Profile selection now returns a localized not-implemented result without touching authentication data.
 - Recursive `CODEX_HOME` backup paths are unavailable.
 - Protected roots and reparse-point paths fail before file operations.

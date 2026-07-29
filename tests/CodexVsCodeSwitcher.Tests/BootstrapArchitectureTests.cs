@@ -51,6 +51,18 @@ public sealed class BootstrapArchitectureTests
     }
 
     [Fact]
+    public void ProductionController_DoesNotLaunchASecondCodexHomeProcessForUsage()
+    {
+        string source = ReadRepositoryFile(
+            "src",
+            "CodexVsCodeSwitcher",
+            "OverlayController.cs");
+
+        Assert.Contains("new UnavailableUsageProvider()", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new CodexCliStatusUsageProvider()", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Overlay_IsNotConfiguredAsGloballyTopmost()
     {
         string controller = ReadRepositoryFile(
