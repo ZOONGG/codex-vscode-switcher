@@ -4,6 +4,7 @@
 
 ### Added
 
+- One-step first launch now detects VS Code through its PATH CLI shim, asks for the profile in-app, and offers an explicit install-and-continue action when the dedicated Codex extension is missing.
 - Real isolated VS Code launch with dedicated data/extensions, child-only `CODEX_HOME`, workspace restoration, and official Codex extension detection/install.
 - Transactional profile switching with graceful managed-only shutdown, verified-window success criteria, application-wide serialization, and one-shot rollback.
 - Persisted sanitized managed-instance identity with PID/start-time/executable/command-line/process-tree/HWND verification.

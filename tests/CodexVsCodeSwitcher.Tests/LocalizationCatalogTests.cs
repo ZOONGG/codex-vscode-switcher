@@ -55,6 +55,15 @@ public sealed class LocalizationCatalogTests
             Assert.NotEqual(
                 "FocusManagedVsCodeToShowOverlay",
                 LocalizationCatalog.Text(language, "FocusManagedVsCodeToShowOverlay"));
+            Assert.NotEqual(
+                "ChooseProfileTitle",
+                LocalizationCatalog.Text(language, "ChooseProfileTitle"));
+            Assert.NotEqual(
+                "CodexExtensionRequiredForLaunch",
+                LocalizationCatalog.Text(language, "CodexExtensionRequiredForLaunch", "profile"));
+            Assert.NotEqual(
+                "InstallAndContinue",
+                LocalizationCatalog.Text(language, "InstallAndContinue"));
         }
     }
 

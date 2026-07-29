@@ -27,6 +27,7 @@ internal sealed class OverlayController : IDisposable
     private readonly ProfileStatusService statusService;
     private readonly DispatcherTimer windowTrackingTimer;
     private readonly CancellationTokenSource disposalTokenSource = new();
+    private readonly SemaphoreSlim launchWorkflowLock = new(1, 1);
     private OverlaySettings settings;
     private Localizer localizer;
     private TrayIconService? trayIcon;
@@ -186,12 +187,23 @@ internal sealed class OverlayController : IDisposable
 
     private async Task SwitchProfileAsync(string profile, bool restartIfActive)
     {
+        if (!launchWorkflowLock.Wait(0))
+        {
+            ShowIntegrationError("ProfileSwitchBusy");
+            return;
+        }
+
         ProfileInfo? selected = profiles.FirstOrDefault(
             item => item.Name.Equals(profile, StringComparison.OrdinalIgnoreCase));
         string displayName = selected?.DisplayName ?? profile;
         overlayWindow?.SetSwitching(true, displayName);
         try
         {
+            if (!await EnsureCodexExtensionForLaunchAsync(displayName).ConfigureAwait(true))
+            {
+                return;
+            }
+
             string? workspace = settings.ReopenLastWorkspaceAfterSwitch
                 ? FirstNonEmpty(settings.LastOpenedWorkspace, workspaceHistory.ReadLastWorkspace())
                 : null;
@@ -238,6 +250,7 @@ internal sealed class OverlayController : IDisposable
         finally
         {
             overlayWindow?.SetSwitching(false, null);
+            launchWorkflowLock.Release();
         }
     }
 
@@ -246,8 +259,24 @@ internal sealed class OverlayController : IDisposable
         string? active = activeProfileStore.Read();
         if (string.IsNullOrWhiteSpace(active))
         {
-            ShowIntegrationError("SelectProfileFirst");
-            return;
+            IReadOnlyList<ProfileInfo> candidates = profiles
+                .Where(static profile => profile.IsEligibleForSwitching)
+                .ToArray();
+            if (candidates.Count == 0)
+            {
+                ShowIntegrationError("NoReadyProfiles");
+                return;
+            }
+
+            Window? owner = settingsWindow?.IsVisible == true ? settingsWindow : null;
+            IntPtr nativeOwner = owner is null && overlayWindow?.IsVisible == true
+                ? overlayWindow.Handle
+                : IntPtr.Zero;
+            active = ProfileSelectionDialog.Show(owner, nativeOwner, candidates, localizer);
+            if (string.IsNullOrWhiteSpace(active))
+            {
+                return;
+            }
         }
 
         _ = SwitchProfileAsync(active, restartIfActive: false);
@@ -266,12 +295,17 @@ internal sealed class OverlayController : IDisposable
     }
 
     private async Task InstallCodexExtensionAsync()
+        => _ = await InstallCodexExtensionCoreAsync().ConfigureAwait(true);
+
+    private async Task<CodexExtensionStatus> InstallCodexExtensionCoreAsync()
     {
         string? executable = executableLocator.Locate(settings.CustomVsCodeExecutablePath);
         if (executable is null)
         {
             ShowIntegrationError("VsCodeExecutableMissing");
-            return;
+            return new CodexExtensionStatus(
+                CodexExtensionState.VsCodeCliUnavailable,
+                DetailKey: "VsCodeExecutableMissing");
         }
 
         CodexExtensionStatus result = await extensionManager.InstallAsync(
@@ -293,6 +327,44 @@ internal sealed class OverlayController : IDisposable
         }
 
         settingsWindow?.RefreshIntegrationPage();
+        return result;
+    }
+
+    private async Task<bool> EnsureCodexExtensionForLaunchAsync(string profileDisplayName)
+    {
+        string? executable = executableLocator.Locate(settings.CustomVsCodeExecutablePath);
+        if (executable is null)
+        {
+            ShowIntegrationError("VsCodeExecutableMissing");
+            return false;
+        }
+
+        CodexExtensionStatus current = extensionManager.Detect(settings.DedicatedVsCodeExtensionsDirectory);
+        if (current.State == CodexExtensionState.Installed)
+        {
+            return true;
+        }
+
+        Window? owner = settingsWindow?.IsVisible == true ? settingsWindow : null;
+        IntPtr nativeOwner = owner is null && overlayWindow?.IsVisible == true
+            ? overlayWindow.Handle
+            : IntPtr.Zero;
+        bool approved = ConfirmDialog.Show(
+            owner,
+            nativeOwner,
+            localizer["CodexExtensionRequiredTitle"],
+            localizer.Format("CodexExtensionRequiredForLaunch", profileDisplayName),
+            localizer["InstallAndContinue"],
+            localizer["Cancel"]);
+        if (!approved)
+        {
+            logger.Info("Managed VS Code launch was canceled before Codex extension installation.");
+            return false;
+        }
+
+        overlayWindow?.SetSwitchingStatus(localizer["InstallingCodexExtension"]);
+        CodexExtensionStatus installed = await InstallCodexExtensionCoreAsync().ConfigureAwait(true);
+        return installed.State == CodexExtensionState.Installed;
     }
 
     private void RefreshProfiles()
@@ -481,8 +553,16 @@ internal sealed class OverlayController : IDisposable
             !string.IsNullOrWhiteSpace(activeProfileStore.Read()));
         if (guidanceKey is not null)
         {
-            ShowIntegrationNotice(guidanceKey);
-            logger.Info("Manual overlay reveal was blocked by managed VS Code visibility isolation.");
+            if (managedObservation?.Window is null)
+            {
+                logger.Info("Manual overlay reveal is starting the managed VS Code onboarding flow.");
+                LaunchManagedVsCode();
+            }
+            else
+            {
+                ShowIntegrationNotice(guidanceKey);
+                logger.Info("Manual overlay reveal was blocked until managed VS Code is focused.");
+            }
         }
     }
 
