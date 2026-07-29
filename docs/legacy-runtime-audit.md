@@ -10,8 +10,8 @@ The copied baseline was audited before modification for product identifiers, pro
 | `SharedCodexStateMigrationService` | Read and merged shared sessions/databases | Removed |
 | `CodexProcessService` | Located, started, closed, and force-killed the desktop process | Removed |
 | `CodexWindowFinder` / `CodexWindowInfo` | Matched desktop process/window metadata | Removed |
-| `OverlayController` | Attached to and tracked a Codex Desktop window | Replaced with standalone bootstrap controller |
-| Settings UI | Exposed launch, close, and desktop attachment behavior | Replaced with VS Code integration placeholders |
+| `OverlayController` | Attached to and tracked a Codex Desktop window | Replaced with isolated floating state and read-only VS Code window tracking |
+| Settings UI | Exposed launch, close, and desktop attachment behavior | Replaced with VS Code attachment controls while launch/profile activation remain disabled |
 | Mutex, startup value, executable, AppUserModelID | Could collide with the original application | Replaced with unique identifiers |
 | Install/publish/CI | Used old executable and archive names | Renamed; new installer AppId added |
 | Repository/release URLs | Pointed at the copied public project | Removed; update channel is unconfigured |

@@ -3,7 +3,7 @@
 Codex VS Code Switcher contains:
 
 - `CodexVsCodeSwitcher.Core`: storage layout, protected-path policy, profile metadata, usage status, minimal backups, migration planning, and future VS Code contracts;
-- `CodexVsCodeSwitcher`: standalone WPF shell, tray lifecycle, hotkeys, settings, localization, and profile presentation;
+- `CodexVsCodeSwitcher`: floating/VS Code-attached WPF shell, tray lifecycle, hotkeys, settings, localization, and profile presentation;
 - `CodexVsCodeSwitcher.Tests`: isolation and regression coverage with temporary dummy data.
 
 ## Trust boundaries
@@ -18,11 +18,21 @@ Runtime storage services receive the policy before they create directories or wr
 
 No ChatGPT/Codex Desktop process or window services are present.
 
-## Future VS Code boundary
+## VS Code window boundary
 
-The core exposes interfaces for locating, launching, tracking processes/windows, resolving profile homes, and workspace history. No concrete VS Code backend exists yet.
+Read-only window discovery is implemented for visible top-level windows owned by `Code.exe`, `Code - Insiders.exe`, or an exact configured executable. It does not use window titles, launch or stop processes, or accept unrelated Electron applications. If no supported window exists, the switcher remains in floating mode.
 
-`VsCodeLaunchOptions` keeps future executable, `--user-data-dir`, `--extensions-dir`, workspace, profile `CODEX_HOME`, and new-window intent in one model.
+Launching VS Code, setting `CODEX_HOME`, reopening workspaces, and activating profiles remain future boundaries. `VsCodeLaunchOptions` keeps their future inputs in one model.
+
+## Overlay state
+
+`OverlaySettings` is the central persisted model for display mode, attached offsets, floating physical-pixel coordinates, monitor identity, scale, and integration preference. Settings writes use a same-directory temporary file and atomic replacement. A small corrupt settings file is renamed as a timestamped backup before safe defaults are loaded.
+
+Floating placement is clamped against current work areas while preserving negative virtual-screen coordinates. Primary-button dragging starts only from non-interactive background regions and never invokes profile activation.
+
+## Profile audit
+
+`ProfileStorageAuditService` inspects immediate directories under `.codex-vscode-profiles`. It parses only the small top-level authentication JSON for structural validity. Runtime trees and files are counted and measured without content ingestion. Sessions, archived sessions, rollout JSONL, databases, logs, caches, attachments, and temporary data are ineligible for backup or activation.
 
 ## Minimal backups
 

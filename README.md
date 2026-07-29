@@ -2,7 +2,7 @@
 
 Codex VS Code Switcher is a new, independent Windows application being prepared to switch isolated Codex profiles inside a dedicated Visual Studio Code instance.
 
-This repository is currently at the **bootstrap and isolation stage**. The storage boundaries, product identity, reusable WPF shell, settings, and future integration contracts are ready. VS Code discovery, launching, profile activation, workspace reopening, window tracking, and overlay attachment are not implemented yet.
+This repository is at the **safe overlay and isolation stage**. Floating controls, read-only VS Code window discovery/attachment, storage boundaries, and copied-profile validation are implemented. VS Code launching, profile activation, and workspace reopening are not implemented yet.
 
 Selecting a profile is intentionally fail-safe and displays:
 
@@ -42,6 +42,9 @@ The original Codex/ChatGPT desktop state and the original Codex Swap Account app
 
 - independent executable, assembly, namespace, mutex, AppUserModelID, startup entry, shortcuts, installer identity, and app-data roots;
 - WPF overlay shell, tray icon, global hotkeys, themes, English/Russian localization, settings, and safe profile metadata management;
+- floating Compact, Expanded, and Auto modes with persistent multi-monitor positioning and background-only dragging;
+- read-only attachment to verified `Code.exe`, `Code - Insiders.exe`, or an exact configured executable, with floating fallback;
+- structural valid / invalid / incomplete audit for profiles under the dedicated root, without logging credential contents;
 - dedicated VS Code integration settings and placeholders;
 - profile status and usage indicator UI for profiles already present under the dedicated profile root;
 - explicit allowlist-only minimal backup infrastructure with 10 MB/file, 25 MB/transaction, five-backup, and 100 MB retention limits;
@@ -50,10 +53,9 @@ The original Codex/ChatGPT desktop state and the original Codex Swap Account app
 
 ## Deliberately disabled
 
-- locating or launching VS Code;
+- launching VS Code;
 - setting `CODEX_HOME` for VS Code;
 - switching a VS Code profile;
-- attaching the overlay to a VS Code window;
 - controlling, closing, or restarting ChatGPT/Codex Desktop;
 - reading or replacing `%USERPROFILE%\.codex\auth.json`;
 - recursive `CODEX_HOME` backups;
