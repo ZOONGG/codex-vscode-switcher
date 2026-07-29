@@ -716,6 +716,12 @@ internal sealed class OverlayController : IDisposable
             {
                 managedInstanceStore.Clear();
             }
+            else if (observation.State.RootProcessId != state.RootProcessId
+                || observation.State.RootProcessStartTimeUtc != state.RootProcessStartTimeUtc)
+            {
+                managedInstanceStore.Write(observation.State);
+                logger.Info("Recovered the verified managed VS Code process after launcher handoff.");
+            }
 
             return observation;
         }

@@ -11,6 +11,9 @@ internal sealed class ManagedVsCodeRuntime : IManagedVsCodeRuntime
     private readonly ManagedProcessIdentityPolicy identityPolicy = new();
 
     public ManagedVsCodeObservation? Observe(ManagedVsCodeInstanceState state)
+        => ObserveExact(state) ?? TryObserveTransferredRoot(state);
+
+    private ManagedVsCodeObservation? ObserveExact(ManagedVsCodeInstanceState state)
     {
         if (!TryOpenVerifiedRoot(state, out Process? root))
         {
@@ -103,11 +106,6 @@ internal sealed class ManagedVsCodeRuntime : IManagedVsCodeRuntime
                 return observation;
             }
 
-            if (observation is null)
-            {
-                return null;
-            }
-
             await Task.Delay(250, cancellationToken).ConfigureAwait(false);
         }
 
@@ -186,6 +184,79 @@ internal sealed class ManagedVsCodeRuntime : IManagedVsCodeRuntime
         {
             process?.Dispose();
             process = null;
+            return false;
+        }
+    }
+
+    private ManagedVsCodeObservation? TryObserveTransferredRoot(ManagedVsCodeInstanceState state)
+    {
+        IReadOnlyDictionary<int, int> parentByProcess = SnapshotParentProcesses();
+        HashSet<int> descendants = CollectDescendants(state.RootProcessId, parentByProcess);
+        var candidates = new List<ProcessIdentityEvidence>();
+        foreach (int processId in descendants)
+        {
+            if (processId == state.RootProcessId
+                || !TryReadIdentityEvidence(processId, out ProcessIdentityEvidence evidence)
+                || !identityPolicy.IsManagedRootHandoffCandidate(state, evidence))
+            {
+                continue;
+            }
+
+            candidates.Add(evidence);
+        }
+
+        ManagedVsCodeObservation? fallback = null;
+        foreach (ProcessIdentityEvidence candidate in candidates.OrderBy(static item => item.StartTimeUtc))
+        {
+            ManagedVsCodeInstanceState recovered = state with
+            {
+                RootProcessId = candidate.ProcessId,
+                RootProcessStartTimeUtc = candidate.StartTimeUtc,
+            };
+            ManagedVsCodeObservation? observation = ObserveExact(recovered);
+            if (observation?.Window is not null)
+            {
+                return observation;
+            }
+
+            fallback ??= observation;
+        }
+
+        return fallback;
+    }
+
+    private static bool TryReadIdentityEvidence(
+        int processId,
+        out ProcessIdentityEvidence evidence)
+    {
+        evidence = null!;
+        try
+        {
+            using Process process = Process.GetProcessById(processId);
+            string? executable = process.MainModule?.FileName;
+            string? commandLine = NativeMethods.TryReadProcessCommandLine(process.Id);
+            if (process.HasExited || executable is null || commandLine is null)
+            {
+                return false;
+            }
+
+            evidence = new ProcessIdentityEvidence(
+                process.Id,
+                new DateTimeOffset(process.StartTime.ToUniversalTime(), TimeSpan.Zero),
+                executable,
+                NativeMethods.ParseCommandLine(commandLine));
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (Win32Exception)
+        {
             return false;
         }
     }

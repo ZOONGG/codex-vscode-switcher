@@ -35,6 +35,7 @@
 ### Fixed
 
 - “Show switcher” now explains how to launch or focus managed VS Code instead of silently doing nothing while managed-only visibility is enabled.
+- Managed launch now follows VS Code’s verified child-process handoff instead of failing immediately when the short-lived launcher exits before the editor window appears.
 
 ### Removed
 

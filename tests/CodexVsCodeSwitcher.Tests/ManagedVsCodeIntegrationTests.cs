@@ -145,6 +145,61 @@ public sealed class ManagedVsCodeIntegrationTests
     }
 
     [Fact]
+    public void ManagedIdentity_AcceptsVerifiedLauncherHandoffCandidate()
+    {
+        using var temp = new TempDirectory();
+        ManagedVsCodeInstanceState state = State(temp.Path, processId: 42);
+        var evidence = new ProcessIdentityEvidence(
+            84,
+            state.LaunchTimestampUtc.AddSeconds(1),
+            state.ExecutablePath,
+            [
+                state.ExecutablePath,
+                $"--user-data-dir={state.UserDataDirectory}",
+                "--extensions-dir",
+                state.ExtensionsDirectory,
+                "--new-window",
+            ]);
+
+        Assert.True(new ManagedProcessIdentityPolicy().IsManagedRootHandoffCandidate(state, evidence));
+    }
+
+    [Theory]
+    [InlineData(-10)]
+    [InlineData(70)]
+    public void ManagedIdentity_RejectsLauncherHandoffOutsideLaunchWindow(int secondsFromLaunch)
+    {
+        using var temp = new TempDirectory();
+        ManagedVsCodeInstanceState state = State(temp.Path, processId: 42);
+        var evidence = new ProcessIdentityEvidence(
+            84,
+            state.LaunchTimestampUtc.AddSeconds(secondsFromLaunch),
+            state.ExecutablePath,
+            [
+                "--user-data-dir",
+                state.UserDataDirectory,
+                "--extensions-dir",
+                state.ExtensionsDirectory,
+            ]);
+
+        Assert.False(new ManagedProcessIdentityPolicy().IsManagedRootHandoffCandidate(state, evidence));
+    }
+
+    [Fact]
+    public void ManagedIdentity_RejectsLauncherHandoffWithoutDedicatedArguments()
+    {
+        using var temp = new TempDirectory();
+        ManagedVsCodeInstanceState state = State(temp.Path, processId: 42);
+        var evidence = new ProcessIdentityEvidence(
+            84,
+            state.LaunchTimestampUtc.AddSeconds(1),
+            state.ExecutablePath,
+            [state.ExecutablePath, "--new-window"]);
+
+        Assert.False(new ManagedProcessIdentityPolicy().IsManagedRootHandoffCandidate(state, evidence));
+    }
+
+    [Fact]
     public async Task Activation_DoesNotCopyProfileOrAuthenticationFile()
     {
         using var context = new ActivationContext();
