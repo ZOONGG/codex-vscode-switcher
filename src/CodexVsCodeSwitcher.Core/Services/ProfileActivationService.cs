@@ -231,7 +231,8 @@ public sealed class ProfileActivationService
             cancellationToken).ConfigureAwait(false);
         if (launchResult.Status == ProfileActivationStatus.Succeeded
             || previousState is null
-            || string.IsNullOrWhiteSpace(previousActiveProfile))
+            || string.IsNullOrWhiteSpace(previousActiveProfile)
+            || !launchResult.SafeToRollback)
         {
             return launchResult;
         }
@@ -297,10 +298,17 @@ public sealed class ProfileActivationService
                 ManagedVsCodeObservation? failedInstance = runtime.Observe(pendingState);
                 if (failedInstance is not null)
                 {
-                    _ = await runtime.RequestCloseAsync(
+                    ManagedShutdownResult cleanup = await runtime.RequestCloseAsync(
                         failedInstance,
                         TimeSpan.FromSeconds(5),
                         cancellationToken).ConfigureAwait(false);
+                    if (cleanup.Status is not (ManagedShutdownStatus.Closed or ManagedShutdownStatus.NotRunning))
+                    {
+                        return new ProfileActivationResult(
+                            ProfileActivationStatus.WindowNotFound,
+                            "ManagedWindowNotFoundProcessStillRunning",
+                            SafeToRollback: false);
+                    }
                 }
 
                 instanceStore.Clear();

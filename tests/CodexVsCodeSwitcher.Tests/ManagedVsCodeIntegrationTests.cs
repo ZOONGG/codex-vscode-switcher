@@ -269,6 +269,24 @@ public sealed class ManagedVsCodeIntegrationTests
     }
 
     [Fact]
+    public async Task LiveFailedLaunch_BlocksUnsafeSimultaneousRollback()
+    {
+        using var context = new ActivationContext();
+        context.ConfigurePreviousManagedProfile("beta");
+        context.Runtime.WaitResults.Enqueue(null);
+        context.Runtime.KeepLaunchedProcessAliveWhenWindowMissing = true;
+        context.Runtime.ShutdownResults.Enqueue(ManagedShutdownStatus.Closed);
+        context.Runtime.ShutdownResults.Enqueue(ManagedShutdownStatus.InvalidTarget);
+
+        ProfileActivationResult result = await context.ActivateAsync("alpha");
+
+        Assert.Equal(ProfileActivationStatus.WindowNotFound, result.Status);
+        Assert.False(result.SafeToRollback);
+        Assert.Single(context.Runtime.LaunchPlans);
+        Assert.Equal("beta", context.Layout.ActiveProfileStore.Read());
+    }
+
+    [Fact]
     public void ForceCloseTargetsOnlyReverifiedManagedPids()
     {
         using var context = new ActivationContext();
@@ -529,12 +547,14 @@ public sealed class ManagedVsCodeIntegrationTests
 
         public ManagedVsCodeObservation? Current { get; set; }
         public ManagedShutdownStatus ShutdownStatus { get; set; } = ManagedShutdownStatus.Closed;
+        public Queue<ManagedShutdownStatus> ShutdownResults { get; } = new();
         public List<VsCodeProcessStartSpec> LaunchPlans { get; } = [];
         public Queue<ManagedVsCodeObservation?> WaitResults { get; } = new();
         public Func<ManagedVsCodeInstanceState, CancellationToken, Task<ManagedVsCodeObservation?>>? WaitHandler { get; set; }
         public HashSet<int> ShutdownTargets { get; } = [];
         public HashSet<int> ForceCloseTargets { get; } = [];
         public int OrdinaryProcessId { get; set; } = 9999;
+        public bool KeepLaunchedProcessAliveWhenWindowMissing { get; set; }
 
         public ManagedVsCodeObservation? Observe(ManagedVsCodeInstanceState state)
             => Current?.State.RootProcessId == state.RootProcessId ? Current : null;
@@ -549,12 +569,15 @@ public sealed class ManagedVsCodeIntegrationTests
                 ShutdownTargets.Add(processId);
             }
 
-            if (ShutdownStatus == ManagedShutdownStatus.Closed)
+            ManagedShutdownStatus status = ShutdownResults.TryDequeue(out ManagedShutdownStatus queued)
+                ? queued
+                : ShutdownStatus;
+            if (status == ManagedShutdownStatus.Closed)
             {
                 Current = null;
             }
 
-            return Task.FromResult(new ManagedShutdownResult(ShutdownStatus, instance.VerifiedProcessIds));
+            return Task.FromResult(new ManagedShutdownResult(status, instance.VerifiedProcessIds));
         }
 
         public ManagedProcessIdentity Launch(VsCodeProcessStartSpec startSpec)
@@ -582,7 +605,12 @@ public sealed class ManagedVsCodeIntegrationTests
                 result = SuccessObservation(state);
             }
 
-            Current = result;
+            Current = result ?? (KeepLaunchedProcessAliveWhenWindowMissing
+                ? new ManagedVsCodeObservation(
+                    state,
+                    new HashSet<int> { state.RootProcessId },
+                    Window: null)
+                : null);
             return result;
         }
 

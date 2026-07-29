@@ -73,7 +73,8 @@ public sealed record ProfileActivationResult(
     string? ActiveProfileId = null,
     string? FailureDetailKey = null,
     bool RollbackAttempted = false,
-    bool RollbackSucceeded = false);
+    bool RollbackSucceeded = false,
+    bool SafeToRollback = true);
 
 public enum CodexExtensionState
 {

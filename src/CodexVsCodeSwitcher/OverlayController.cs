@@ -230,6 +230,11 @@ internal sealed class OverlayController : IDisposable
         catch (OperationCanceledException)
         {
         }
+        catch (Exception exception)
+        {
+            logger.Error("Managed VS Code profile activation failed unexpectedly.", exception);
+            ShowIntegrationError("VsCodeLaunchFailed");
+        }
         finally
         {
             overlayWindow?.SetSwitching(false, null);
