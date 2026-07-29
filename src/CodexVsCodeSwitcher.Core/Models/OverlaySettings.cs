@@ -38,7 +38,7 @@ public sealed class OverlaySettings
 
     public bool ReopenLastWorkspaceAfterSwitch { get; set; } = true;
 
-    public bool AttachOverlayToVsCode { get; set; } = true;
+    public bool AttachOverlayToVsCode { get; set; }
 
     public HotkeySettings Hotkeys { get; set; } = HotkeySettings.CreateDefault();
 

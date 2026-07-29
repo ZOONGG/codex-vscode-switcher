@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using CodexVsCodeSwitcher.Core.Models;
 using CodexVsCodeSwitcher.Core.Services;
 
@@ -19,6 +20,8 @@ internal sealed class OverlayController : IDisposable
     private readonly SafeLogger logger;
     private readonly MinimalBackupService backupMaintenance;
     private readonly ProfileStatusService statusService;
+    private readonly VsCodeWindowFinder windowFinder = new();
+    private readonly DispatcherTimer windowTrackingTimer;
     private readonly CancellationTokenSource disposalTokenSource = new();
     private OverlaySettings settings;
     private Localizer localizer;
@@ -28,6 +31,9 @@ internal sealed class OverlayController : IDisposable
     private ProfileManagerWindow? profileManagerWindow;
     private HotkeyManager? hotkeyManager;
     private IReadOnlyList<ProfileInfo> profiles = [];
+    private IntPtr attachedVsCodeWindow;
+    private bool overlayRequestedVisible;
+    private bool persistedAttachmentPreference;
 
     public OverlayController(
         CodexVsCodeStorageLayout paths,
@@ -50,11 +56,17 @@ internal sealed class OverlayController : IDisposable
         this.logger = logger;
         this.backupMaintenance = backupMaintenance;
         settings = settingsService.Load();
+        persistedAttachmentPreference = settings.AttachOverlayToVsCode;
         localizer = new Localizer(settings.Language);
         App.ApplyTheme(settings.Theme);
         var statusStore = new ProfileStatusStore(paths.ProfileStatusFile, protectedPaths);
         statusService = new ProfileStatusService(statusStore, new CodexCliStatusUsageProvider(), logger);
         statusService.SetStaleThreshold(TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes));
+        windowTrackingTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(750),
+        };
+        windowTrackingTimer.Tick += (_, _) => TrackVsCodeWindowSafely();
     }
 
     public void Start()
@@ -68,17 +80,19 @@ internal sealed class OverlayController : IDisposable
             ShowOverlay();
         }
 
+        windowTrackingTimer.Start();
         if (settingsService.LastLoadWarningKey is string warningKey)
         {
             overlayWindow?.ShowError(localizer[warningKey]);
         }
 
-        logger.Info("Bootstrap shell started; VS Code backend is disabled.");
+        logger.Info("Switcher shell started; read-only VS Code window tracking is enabled and profile activation remains disabled.");
     }
 
     public void Dispose()
     {
         disposalTokenSource.Cancel();
+        windowTrackingTimer.Stop();
         statusService.Dispose();
         hotkeyManager?.Dispose();
         trayIcon?.Dispose();
@@ -334,12 +348,13 @@ internal sealed class OverlayController : IDisposable
     private void ShowOverlay()
     {
         EnsureOverlay();
-        overlayWindow!.ShowFloating();
-        trayIcon?.UpdateOverlayState(true);
+        overlayRequestedVisible = true;
+        UpdateOverlayHost();
     }
 
     private void HideOverlay()
     {
+        overlayRequestedVisible = false;
         overlayWindow?.Hide();
         trayIcon?.UpdateOverlayState(false);
     }
@@ -349,6 +364,16 @@ internal sealed class OverlayController : IDisposable
         App.ApplyTheme(settings.Theme);
         localizer.SetLanguage(settings.Language);
         overlayWindow?.ApplySettings();
+        if (!settings.AttachOverlayToVsCode)
+        {
+            attachedVsCodeWindow = IntPtr.Zero;
+            overlayWindow?.Detach();
+        }
+
+        if (overlayRequestedVisible)
+        {
+            UpdateOverlayHost();
+        }
         settingsWindow?.RefreshTheme();
         profileManagerWindow?.RefreshTheme();
         trayIcon?.UpdateStartWithWindows(settings.StartWithWindows);
@@ -360,8 +385,19 @@ internal sealed class OverlayController : IDisposable
     {
         try
         {
+            bool explicitAttachmentRequest = updatedSettings.AttachOverlayToVsCode
+                && !persistedAttachmentPreference;
+            if (explicitAttachmentRequest && FindVsCodeWindow() == IntPtr.Zero)
+            {
+                updatedSettings.AttachOverlayToVsCode = false;
+                string message = localizer["VsCodeWindowNotFound"];
+                overlayWindow?.ShowError(message);
+                trayIcon?.ShowBalloon("Codex VS Code Switcher", message);
+            }
+
             settings = updatedSettings;
             settingsService.Save(settings);
+            persistedAttachmentPreference = settings.AttachOverlayToVsCode;
             statusService.SetStaleThreshold(TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes));
             ApplySettings();
             RefreshStatusIndicators();
@@ -417,9 +453,72 @@ internal sealed class OverlayController : IDisposable
     {
         settings = new OverlaySettings();
         settingsService.Save(settings);
+        persistedAttachmentPreference = settings.AttachOverlayToVsCode;
         settingsWindow?.Close();
         ApplySettings();
         ShowSettingsWindow();
+    }
+
+    private void UpdateOverlayHost()
+    {
+        EnsureOverlay();
+        if (!overlayRequestedVisible)
+        {
+            return;
+        }
+
+        IntPtr vsCodeWindow = settings.AttachOverlayToVsCode ? FindVsCodeWindow() : IntPtr.Zero;
+        if (vsCodeWindow != IntPtr.Zero)
+        {
+            if (attachedVsCodeWindow != vsCodeWindow)
+            {
+                attachedVsCodeWindow = vsCodeWindow;
+                overlayWindow!.AttachTo(vsCodeWindow);
+                logger.Info("Attached switcher overlay to a supported Visual Studio Code window.");
+            }
+
+            overlayWindow!.UpdatePlacement(vsCodeWindow);
+        }
+        else
+        {
+            if (attachedVsCodeWindow != IntPtr.Zero)
+            {
+                logger.Info("The attached Visual Studio Code window is unavailable; returning to floating mode.");
+            }
+
+            attachedVsCodeWindow = IntPtr.Zero;
+            overlayWindow!.ShowFloating();
+        }
+
+        trayIcon?.UpdateOverlayState(overlayWindow.IsVisible);
+    }
+
+    private IntPtr FindVsCodeWindow()
+    {
+        bool canSearch = settings.AutomaticallyDetectVsCode
+            || !string.IsNullOrWhiteSpace(settings.CustomVsCodeExecutablePath);
+        return canSearch
+            ? windowFinder.FindMainWindow(
+                settings.CustomVsCodeExecutablePath,
+                settings.AutomaticallyDetectVsCode)
+            : IntPtr.Zero;
+    }
+
+    private void TrackVsCodeWindowSafely()
+    {
+        try
+        {
+            UpdateOverlayHost();
+        }
+        catch (Exception exception)
+        {
+            logger.Error("Visual Studio Code window tracking failed.", exception);
+            if (attachedVsCodeWindow != IntPtr.Zero)
+            {
+                attachedVsCodeWindow = IntPtr.Zero;
+                overlayWindow?.ShowFloating();
+            }
+        }
     }
 
     private void OpenFolder(string folder)

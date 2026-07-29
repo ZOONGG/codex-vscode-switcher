@@ -20,6 +20,9 @@ internal static class NativeMethods
     public const int ModControl = 0x0002;
     public const int ModShift = 0x0004;
     public const int ModWin = 0x0008;
+    public const uint GwOwner = 4;
+
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     public static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
@@ -31,6 +34,16 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetWindow(IntPtr hWnd, uint command);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
