@@ -175,7 +175,19 @@ internal sealed class ProfileManagerWindow : Window
 
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
         text.Children.Add(new TextBlock { Text = profile.DisplayName, FontSize = 16, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
-        text.Children.Add(new TextBlock { Text = profile.Name, FontSize = 13, Foreground = Brush("MutedTextBrush"), TextTrimming = TextTrimming.CharacterEllipsis });
+        string status = profile.ValidationStatus switch
+        {
+            ProfileValidationStatus.Valid => localizer["ProfileValid"],
+            ProfileValidationStatus.Invalid => localizer["ProfileInvalid"],
+            _ => localizer["ProfileIncomplete"],
+        };
+        text.Children.Add(new TextBlock
+        {
+            Text = $"{profile.Name} · {status} · {FormatBytes(profile.DirectorySizeBytes)}",
+            FontSize = 13,
+            Foreground = Brush("MutedTextBrush"),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
         Grid.SetColumn(text, 3);
         grid.Children.Add(text);
 
@@ -423,4 +435,18 @@ internal sealed class ProfileManagerWindow : Window
     }
 
     private SolidColorBrush Brush(string key) => ((SolidColorBrush)Application.Current.FindResource(key)).Clone();
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        double value = Math.Max(0, bytes);
+        int unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return $"{value:0.##} {units[unit]}";
+    }
 }

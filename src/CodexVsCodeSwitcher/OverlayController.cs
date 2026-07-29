@@ -132,7 +132,7 @@ internal sealed class OverlayController : IDisposable
         hotkeyManager.ToggleOverlayRequested += ToggleOverlay;
         hotkeyManager.ProfileHotkeyRequested += index =>
         {
-            if (index >= 0 && index < profiles.Count)
+            if (index >= 0 && index < profiles.Count && profiles[index].IsEligibleForSwitching)
             {
                 _ = ShowBootstrapUnavailableAsync(profiles[index].Name);
             }
@@ -218,7 +218,7 @@ internal sealed class OverlayController : IDisposable
     private async Task RefreshUsageForProfileAsync(string profileName)
     {
         ProfileInfo? profile = profiles.FirstOrDefault(item => item.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase));
-        if (profile is null)
+        if (profile is null || !profile.IsEligibleForSwitching)
         {
             return;
         }

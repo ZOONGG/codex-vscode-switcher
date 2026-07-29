@@ -284,7 +284,10 @@ internal sealed class OverlayWindow : Window
         compactPopup.IsOpen = false;
         foreach (Button button in profileButtons)
         {
-            button.IsEnabled = !switching;
+            string? profileName = button.Tag as string;
+            ProfileInfo? profile = profiles.FirstOrDefault(
+                item => item.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase));
+            button.IsEnabled = !switching && profile?.IsEligibleForSwitching == true;
         }
     }
 
@@ -464,7 +467,8 @@ internal sealed class OverlayWindow : Window
             {
                 item.ToolTip = BuildUsageToolTip(profile.Name);
             }
-            item.IsEnabled = !isActive && !isSwitching;
+            item.ToolTip = BuildProfileStorageToolTip(profile);
+            item.IsEnabled = !isActive && !isSwitching && profile.IsEligibleForSwitching;
             string name = profile.Name;
             item.Click += (_, _) =>
             {
@@ -543,8 +547,8 @@ internal sealed class OverlayWindow : Window
             Background = isActive ? FindBrush("TabActiveBrush") : FindBrush("TabBackgroundBrush"),
             Cursor = isActive ? Cursors.Arrow : Cursors.Hand,
             Tag = profile.Name,
-            ToolTip = profile.DisplayName,
-            IsEnabled = !isSwitching,
+            ToolTip = BuildProfileStorageToolTip(profile),
+            IsEnabled = !isSwitching && profile.IsEligibleForSwitching,
         };
 
         button.Click += (_, _) =>
@@ -557,6 +561,37 @@ internal sealed class OverlayWindow : Window
         button.MouseEnter += (_, _) => AnimateBrush(button, isActive ? "TabActiveBrush" : "TabHoverBrush");
         button.MouseLeave += (_, _) => AnimateBrush(button, isActive ? "TabActiveBrush" : "TabBackgroundBrush");
         return button;
+    }
+
+    private string BuildProfileStorageToolTip(ProfileInfo profile)
+    {
+        string status = profile.ValidationStatus switch
+        {
+            ProfileValidationStatus.Valid => Localizer?["ProfileValid"] ?? "Valid",
+            ProfileValidationStatus.Invalid => Localizer?["ProfileInvalid"] ?? "Invalid authentication file",
+            _ => Localizer?["ProfileIncomplete"] ?? "Incomplete",
+        };
+        string summary = string.Format(
+            CultureInfo.CurrentCulture,
+            Localizer?["ProfileStorageSummary"] ?? "{0} · {1} · ignored runtime files: {2}",
+            status,
+            FormatBytes(profile.DirectorySizeBytes),
+            profile.IgnoredRuntimeFileCount);
+        return profile.DisplayName + Environment.NewLine + summary;
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        double value = Math.Max(0, bytes);
+        int unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return $"{value:0.##} {units[unit]}";
     }
 
     private string GetProfileIndicator(string profileId)

@@ -6,11 +6,13 @@ public sealed class ProfileDiscoveryService
 {
     private readonly string profilesDirectory;
     private readonly IProtectedPathPolicy protectedPaths;
+    private readonly ProfileStorageAuditService auditService;
 
     public ProfileDiscoveryService(string profilesDirectory, IProtectedPathPolicy protectedPaths)
     {
         this.profilesDirectory = Path.GetFullPath(profilesDirectory);
         this.protectedPaths = protectedPaths;
+        auditService = new ProfileStorageAuditService(this.profilesDirectory, protectedPaths);
     }
 
     public IReadOnlyList<ProfileInfo> DiscoverProfiles()
@@ -20,12 +22,10 @@ public sealed class ProfileDiscoveryService
             return Array.Empty<ProfileInfo>();
         }
 
-        return Directory.EnumerateDirectories(profilesDirectory)
+        return auditService.AuditProfiles()
             .Select(CreateProfileInfo)
-            .Where(static profile => profile is not null)
-            .Cast<ProfileInfo>()
             .OrderBy(static profile => profile.Name, StringComparer.CurrentCultureIgnoreCase)
-            .Take(8)
+            .Take(12)
             .ToArray();
     }
 
@@ -37,32 +37,26 @@ public sealed class ProfileDiscoveryService
         EnsureInsideProfilesRoot(fullDirectory);
         protectedPaths.AssertCanRead(fullDirectory);
 
-        string authFile = Path.Combine(fullDirectory, "auth.json");
-        if (!File.Exists(authFile))
+        ProfileStorageAudit audit = auditService.AuditRequiredProfile(validName);
+        if (!audit.IsEligibleForSwitching)
         {
-            throw new FileNotFoundException($"Profile '{validName}' does not contain auth.json.", authFile);
+            throw new InvalidDataException($"Profile '{validName}' is not eligible for switching.");
         }
 
-        return new ProfileInfo(validName, fullDirectory, authFile);
+        return CreateProfileInfo(audit);
     }
 
-    private ProfileInfo? CreateProfileInfo(string directory)
-    {
-        string fullDirectory = Path.GetFullPath(directory);
-        EnsureInsideProfilesRoot(fullDirectory);
-        protectedPaths.AssertCanRead(fullDirectory);
-
-        string name = Path.GetFileName(fullDirectory);
-        if (!ProfileName.IsValid(name))
+    private static ProfileInfo CreateProfileInfo(ProfileStorageAudit audit)
+        => new(
+            audit.ProfileName,
+            audit.DirectoryPath,
+            Path.Combine(audit.DirectoryPath, "auth.json"))
         {
-            return null;
-        }
-
-        string authFile = Path.Combine(fullDirectory, "auth.json");
-        return File.Exists(authFile)
-            ? new ProfileInfo(name, fullDirectory, authFile)
-            : null;
-    }
+            ValidationStatus = audit.Status,
+            DirectorySizeBytes = audit.DirectorySizeBytes,
+            IgnoredRuntimeFileCount = audit.IgnoredRuntimeFileCount,
+            HasConfigFile = audit.HasConfigFile,
+        };
 
     private void EnsureInsideProfilesRoot(string fullPath)
     {

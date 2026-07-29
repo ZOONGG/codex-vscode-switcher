@@ -144,8 +144,14 @@ internal sealed class TrayIconService : IDisposable
             var item = new ToolStripMenuItem(profile.DisplayName)
             {
                 Checked = string.Equals(profile.Name, activeProfile, StringComparison.OrdinalIgnoreCase),
-                Enabled = !string.Equals(profile.Name, activeProfile, StringComparison.OrdinalIgnoreCase),
-                ToolTipText = profile.Name,
+                Enabled = profile.IsEligibleForSwitching
+                    && !string.Equals(profile.Name, activeProfile, StringComparison.OrdinalIgnoreCase),
+                ToolTipText = profile.ValidationStatus switch
+                {
+                    ProfileValidationStatus.Valid => localizer["ProfileValid"],
+                    ProfileValidationStatus.Invalid => localizer["ProfileInvalid"],
+                    _ => localizer["ProfileIncomplete"],
+                },
             };
             string profileName = profile.Name;
             item.Click += (_, _) => ProfileSelected?.Invoke(profileName);
