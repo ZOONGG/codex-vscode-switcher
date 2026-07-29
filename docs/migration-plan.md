@@ -1,6 +1,6 @@
 # Future explicit profile migration
 
-This document is a design for a later stage. The bootstrap build does not copy profiles.
+This document is a design for a later explicit migration feature. The current build does not copy profiles.
 
 ## Source and destination
 

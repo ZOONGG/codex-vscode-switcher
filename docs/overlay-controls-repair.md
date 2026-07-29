@@ -15,4 +15,4 @@ The controls themselves used direct WPF event handlers rather than commands or a
 - Saved off-screen positions are clamped to a visible work area; reset uses the primary monitor.
 - Read-only VS Code window discovery accepts only `Code.exe`, `Code - Insiders.exe`, or an exact configured executable path.
 - Interactive window styling explicitly removes `WS_EX_TRANSPARENT`.
-- Profile activation remains fail-safe and disabled.
+- This repair was the prerequisite for the later managed-instance visibility policy. Profile activation is now implemented by the isolated managed VS Code transaction documented in `architecture.md`.

@@ -1,20 +1,28 @@
 # Troubleshooting
 
-## Profile selection says the backend is not implemented
+## VS Code executable was not found
 
-This is expected in the bootstrap build. No authentication file was changed.
+Open **Settings → VS Code integration** and select an exact `Code.exe` or `Code - Insiders.exe`. The dedicated directories are fixed and shown read-only.
 
 ## A profile does not appear
 
 Only valid directories under `%USERPROFILE%\.codex-vscode-profiles` containing a top-level `auth.json` are listed. Automatic migration is intentionally disabled.
 
+## The Codex extension is missing
+
+Use **Install Codex extension**. Network access occurs only after that explicit action and targets the dedicated extension directory.
+
 ## The overlay is hidden
 
-Use the tray icon or the configured global hotkey. Enable **Show switcher on start** in Settings.
+The default policy shows it only while a verified managed VS Code window is foreground. The tray remains available. Check that managed VS Code is running, restored, and focused.
 
-## VS Code fields do not launch anything
+## VS Code did not close
 
-The fields are prepared settings for the later backend. Detection, launch, switching, and attachment are not implemented yet.
+Save or discard changes in the managed VS Code window, then try again. The switcher does not force-close by default.
+
+## A remembered workspace is missing
+
+Choose another folder or `.code-workspace`, or explicitly open an empty window. The missing remembered path is not silently erased.
 
 ## Logs
 

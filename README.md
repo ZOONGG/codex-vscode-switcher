@@ -1,74 +1,84 @@
 # Codex VS Code Switcher
 
-Codex VS Code Switcher is a new, independent Windows application being prepared to switch isolated Codex profiles inside a dedicated Visual Studio Code instance.
+Codex VS Code Switcher is an independent Windows application for running one isolated, managed Visual Studio Code environment with selectable Codex profiles.
 
-This repository is at the **safe overlay and isolation stage**. Floating controls, read-only VS Code window discovery/attachment, storage boundaries, and copied-profile validation are implemented. VS Code launching, profile activation, and workspace reopening are not implemented yet.
+It does not switch ChatGPT Desktop, does not replace a shared authentication file, and does not control ordinary VS Code windows.
 
-Selecting a profile is intentionally fail-safe and displays:
+## How isolation works
 
-> VS Code profile switching is not implemented in this bootstrap build.
+The managed instance always launches with:
 
-No authentication file is changed.
+```text
+Code.exe
+  --user-data-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeData"
+  --extensions-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeExtensions"
+  --new-window
+  [optional folder or .code-workspace]
+```
 
-## Isolation guarantees
+`CODEX_HOME` is added only to `ProcessStartInfo.Environment` for that managed launch and points directly to the selected directory under `%USERPROFILE%\.codex-vscode-profiles`. The switcher never copies a profile or replaces `auth.json`.
 
-The application uses only its own mutable roots:
+Mutable application state remains under:
 
 ```text
 %LOCALAPPDATA%\CodexVsCodeSwitcher
-├── settings.json
-├── profiles.json
-├── profile-status.json
-├── logs
-├── backups
-├── transactions
-├── VSCodeData
-├── VSCodeExtensions
-└── last-workspace.json
-
 %USERPROFILE%\.codex-vscode-profiles
 ```
 
-The following roots are protected in code. Reads used for copying and all writes, moves, deletes, replacements, and backup operations are rejected before filesystem mutation:
+The following roots remain protected:
 
 ```text
 %USERPROFILE%\.codex
 %LOCALAPPDATA%\CodexProfileOverlay
 ```
 
-The original Codex/ChatGPT desktop state and the original Codex Swap Account application are outside this product's storage boundary.
+## Managed-instance identity
 
-## What works in this build
+A window is managed only when all of the following remain valid:
 
-- independent executable, assembly, namespace, mutex, AppUserModelID, startup entry, shortcuts, installer identity, and app-data roots;
-- WPF overlay shell, tray icon, global hotkeys, themes, English/Russian localization, settings, and safe profile metadata management;
-- floating Compact, Expanded, and Auto modes with persistent multi-monitor positioning and background-only dragging;
-- read-only attachment to verified `Code.exe`, `Code - Insiders.exe`, or an exact configured executable, with floating fallback;
-- structural valid / invalid / incomplete audit for profiles under the dedicated root, without logging credential contents;
-- dedicated VS Code integration settings and placeholders;
-- profile status and usage indicator UI for profiles already present under the dedicated profile root;
-- explicit allowlist-only minimal backup infrastructure with 10 MB/file, 25 MB/transaction, five-backup, and 100 MB retention limits;
-- read-only planning for a future explicit migration from `.codex-profiles`;
-- local builds, tests, safety scanning, and portable publishing.
+- the persisted root PID and process start time match;
+- the executable path exactly matches the configured/detected VS Code executable;
+- the root command line contains the exact dedicated `--user-data-dir` and `--extensions-dir`;
+- the window belongs to the launched root process or a verified descendant;
+- the HWND is a visible top-level window owned by that verified process tree.
 
-## Deliberately disabled
+A process named `Code.exe` is not sufficient. Window titles are not used as identity.
 
-- launching VS Code;
-- setting `CODEX_HOME` for VS Code;
-- switching a VS Code profile;
-- controlling, closing, or restarting ChatGPT/Codex Desktop;
-- reading or replacing `%USERPROFILE%\.codex\auth.json`;
-- recursive `CODEX_HOME` backups;
-- automatic profile migration;
-- automatic updates.
+## Overlay behavior
 
-The update channel is not configured. The application does not contact the original project's release endpoint.
+The overlay is not globally topmost. Foreground, minimize/restore, destroy, show/hide, and location changes are tracked with Win32 event hooks, plus a two-second defensive reconciliation timer.
 
-## Future profile migration
+By default the overlay:
 
-The source `%USERPROFILE%\.codex-profiles` is read-only. The current build can create a plan that lists only top-level `auth.json` and `config.toml` files smaller than 10 MB. It does not execute a migration.
+- appears only while a verified managed VS Code window is foreground;
+- remains usable while its own controls and menus are being used;
+- hides over ChatGPT, browsers, Explorer, ordinary VS Code, other editors, Task View, full-screen unrelated apps, and secure desktops;
+- hides when the managed window is minimized or closed;
+- returns when a managed window is restored and focused.
 
-A later explicit workflow must require confirmation, preserve the source, and exclude sessions, rollout JSONL files, databases, logs, caches, and attachments.
+Auto, Compact, Expanded, dragging, scale, offsets, saved position, DPI, multi-monitor placement, and reset-position remain available.
+
+## Profile switching
+
+Profile switches are serialized and transactional:
+
+1. validate the profile, executable, dedicated paths, extension, and workspace;
+2. send normal close requests only to verified managed VS Code windows;
+3. wait for VS Code and any unsaved-file confirmation;
+4. launch the selected profile with isolated arguments and process-only `CODEX_HOME`;
+5. require a valid managed process and visible top-level window;
+6. persist the active profile only after verification;
+7. relaunch the previous profile once if the new launch fails after shutdown.
+
+Force-close is not used by the normal workflow.
+
+## Codex extension and workspaces
+
+The dedicated environment detects the official Marketplace extension `openai.chatgpt`. Installation occurs only after the explicit **Install Codex extension** action and targets only the dedicated extension directory.
+
+The dedicated `User\settings.json` is updated atomically while preserving unrelated valid settings. `chatgpt.openOnStartup` is configured only there.
+
+The switcher supports a folder, a `.code-workspace` file, or an empty window. A missing remembered workspace is reported without silently erasing it.
 
 ## Build and test
 
@@ -89,24 +99,11 @@ artifacts\CodexVsCodeSwitcher-win-x64-portable.zip
 artifacts\SHA256SUMS.txt
 ```
 
-## Repository structure
-
-```text
-src\CodexVsCodeSwitcher          WPF shell
-src\CodexVsCodeSwitcher.Core     storage, safety, models, contracts
-tests\CodexVsCodeSwitcher.Tests  isolation and regression tests
-docs\architecture.md             bootstrap architecture
-docs\migration-plan.md           future explicit migration design
-docs\legacy-runtime-audit.md      removed legacy behavior audit
-```
+See [manual-test-checklist.md](docs/manual-test-checklist.md) before using real profiles.
 
 ## Security
 
-The application is local-only, telemetry-free, and does not log raw authentication contents. Never publish or commit real `auth.json` files. See [SECURITY.md](SECURITY.md).
-
-## Status
-
-This build is preparation work, not a functional VS Code account switcher. See [CHANGELOG.md](CHANGELOG.md) for the current scope.
+The application is local-only, telemetry-free, and never logs authentication contents or raw process environments. Never publish or commit real `auth.json` files. See [SECURITY.md](SECURITY.md).
 
 ## License
 

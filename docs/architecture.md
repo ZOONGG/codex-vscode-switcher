@@ -1,43 +1,43 @@
-# Bootstrap architecture
+# Managed VS Code architecture
 
-Codex VS Code Switcher contains:
+## Components
 
-- `CodexVsCodeSwitcher.Core`: storage layout, protected-path policy, profile metadata, usage status, minimal backups, migration planning, and future VS Code contracts;
-- `CodexVsCodeSwitcher`: floating/VS Code-attached WPF shell, tray lifecycle, hotkeys, settings, localization, and profile presentation;
-- `CodexVsCodeSwitcher.Tests`: isolation and regression coverage with temporary dummy data.
+- `CodexVsCodeSwitcher.Core`: launch plans, profile/workspace validation, switch transaction, rollback, managed metadata, extension management, protected paths, and testable visibility/identity policies.
+- `CodexVsCodeSwitcher`: WPF shell, tray lifecycle, exact process launch, process-tree/window verification, Win32 event hooks, settings, and localization.
+- `CodexVsCodeSwitcher.Tests`: fake profiles, fake processes/windows, fake launchers, temporary extension directories, and isolation regressions.
 
 ## Trust boundaries
 
-`CodexVsCodeStorageLayout` is the source of truth for every owned path. `ProtectedPathPolicy` rejects the main `.codex` state and original application data, descendants, traversal variants, case variants, alternate separators, and detectable reparse points.
+`CodexVsCodeStorageLayout` fixes the dedicated VS Code data, extension, and profile roots. `SettingsService` enforces those roots even when stale settings contain different values. `ProtectedPathPolicy` rejects the main `.codex` state and original application data, including traversal, case variants, and detectable reparse-point escapes.
 
-Runtime storage services receive the policy before they create directories or write files. Profile management additionally confines paths to `.codex-vscode-profiles`.
+Profile validation parses only a bounded top-level authentication JSON for structure. Values are not logged or persisted. Activation passes the profile directory directly as `CODEX_HOME`; it does not copy or merge any profile data.
 
-## Bootstrap activation
+## Launch boundary
 
-`BootstrapProfileActivationService` validates only the profile identifier and returns `VsCodeSwitchingNotImplemented`. It has no filesystem or process dependencies. The WPF controller displays the localized result and never records a new active profile.
+`VsCodeLaunchPlanBuilder` creates an argument list rather than a shell command. `ProcessCommandRunner` uses `UseShellExecute = false` and `ProcessStartInfo.ArgumentList`. Only the managed launch plan contains a `CODEX_HOME` environment override.
 
-No ChatGPT/Codex Desktop process or window services are present.
+Every launch supplies the exact dedicated `--user-data-dir`, `--extensions-dir`, and `--new-window`. Workspace input is either an existing folder, an existing `.code-workspace`, or null.
 
-## VS Code window boundary
+## Managed identity
 
-Read-only window discovery is implemented for visible top-level windows owned by `Code.exe`, `Code - Insiders.exe`, or an exact configured executable. It does not use window titles, launch or stop processes, or accept unrelated Electron applications. If no supported window exists, the switcher remains in floating mode.
+`managed-vscode.json` stores only root PID/start time, profile ID, workspace, executable path, dedicated paths, last verified HWND, and launch time.
 
-Launching VS Code, setting `CODEX_HOME`, reopening workspaces, and activating profiles remain future boundaries. `VsCodeLaunchOptions` keeps their future inputs in one model.
+`ManagedVsCodeRuntime` rejects stale state unless the live root PID, start time, executable, and exact dedicated command-line arguments match. Toolhelp process snapshots establish descendants. Only visible top-level windows from the verified set are candidates; the foreground candidate is preferred.
 
-## Overlay state
+## Switch transaction
 
-`OverlaySettings` is the central persisted model for display mode, attached offsets, floating physical-pixel coordinates, monitor identity, scale, and integration preference. Settings writes use a same-directory temporary file and atomic replacement. A small corrupt settings file is renamed as a timestamped backup before safe defaults are loaded.
+`ProfileActivationService` uses an application-wide semaphore. It validates all inputs, requests normal `WM_CLOSE` on verified managed top-level windows, waits for exit, launches the new process, and waits for a verified window. Active profile and managed metadata writes are atomic and occur only after window verification.
 
-Floating placement is clamped against current work areas while preserving negative virtual-screen coordinates. Primary-button dragging starts only from non-interactive background regions and never invokes profile activation.
+If the new launch fails after a previous managed instance closed, one rollback launch uses the previous profile and workspace. There is no recursive retry.
 
-## Profile audit
+## Overlay visibility
 
-`ProfileStorageAuditService` inspects immediate directories under `.codex-vscode-profiles`. It parses only the small top-level authentication JSON for structural validity. Runtime trees and files are counted and measured without content ingestion. Sessions, archived sessions, rollout JSONL, databases, logs, caches, attachments, and temporary data are ineligible for backup or activation.
+`ManagedVsCodeWindowTracker` registers out-of-context hooks for foreground, minimize start/end, destroy, show, hide, and location change. Callbacks marshal to the WPF dispatcher. A two-second timer reconciles missed events.
 
-## Minimal backups
+`ManagedOverlayVisibilityPolicy` requires a valid, visible, non-minimized managed window and either managed foreground or direct overlay interaction. Secure/lock desktops always hide the overlay. The WPF window is non-topmost; native placement uses `SWP_NOZORDER | SWP_NOACTIVATE`.
 
-`MinimalBackupService` accepts an explicit list of files. It never walks a profile tree. Only `auth.json` and `config.toml` are allowlisted, with strict size and retention caps. Its manifest stores file names, sizes, hashes, and timestamps—not credential contents.
+## Extension and settings
 
-## Updates
+`CodexExtensionManager` scans only the dedicated extension root for `openai.chatgpt-*`, reads only the extension version, and never installs during startup. Explicit install uses the configured VS Code executable with both dedicated path arguments.
 
-There is no configured update endpoint and no runtime network request to the original project.
+Dedicated VS Code settings are parsed with JSONC-compatible comments/trailing commas, updated atomically, and preserve unrelated keys.

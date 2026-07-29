@@ -17,7 +17,7 @@ Paths are normalized, compared case-insensitively on Windows, checked after `..`
 
 Mutable application state belongs under `%LOCALAPPDATA%\CodexVsCodeSwitcher`. Dedicated profile homes belong under `%USERPROFILE%\.codex-vscode-profiles`.
 
-The legacy `%USERPROFILE%\.codex-profiles` source is read-only. Migration is not executed in this bootstrap build.
+The legacy `%USERPROFILE%\.codex-profiles` source is read-only. Automatic migration is not executed.
 
 ## Credentials and backups
 
@@ -31,7 +31,13 @@ The legacy `%USERPROFILE%\.codex-profiles` source is read-only. Migration is not
 
 ## Runtime
 
-The bootstrap runtime does not locate, launch, close, kill, restart, or attach to ChatGPT/Codex Desktop or VS Code. Selecting a profile fails safely without filesystem mutation.
+The runtime launches and controls only the dedicated VS Code process tree it created. Root PID, process start time, exact executable path, exact dedicated command-line arguments, descendants, and top-level HWND ownership are revalidated before window attachment or shutdown.
+
+`CODEX_HOME` is a child-process environment override. The application does not use `setx`, registry environment values, global user/machine environment mutation, or shared authentication replacement.
+
+Normal switching uses `WM_CLOSE` and waits for VS Code to resolve unsaved work. It does not force-kill. Ordinary VS Code, ChatGPT Desktop, browsers, Explorer, and unrelated Electron applications are never targets.
+
+The official Codex extension is installed only after explicit user action and only into the dedicated extension directory.
 
 Automatic updates are disabled until a new update channel is explicitly configured.
 
