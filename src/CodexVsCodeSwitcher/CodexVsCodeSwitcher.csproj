@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>false</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <AssemblyName>CodexVsCodeSwitcher</AssemblyName>
+    <RootNamespace>CodexVsCodeSwitcher</RootNamespace>
+    <Product>Codex VS Code Switcher</Product>
+    <Description>Bootstrap shell for isolated Codex profiles in a dedicated Visual Studio Code instance.</Description>
+    <Company>ZOONGG</Company>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\AppIcon.ico" />
+    <Resource Include="Assets\AppIcon.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CodexVsCodeSwitcher.Core\CodexVsCodeSwitcher.Core.csproj" />
+  </ItemGroup>
+</Project>

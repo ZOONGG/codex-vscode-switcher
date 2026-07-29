@@ -1,23 +1,42 @@
 # Security Policy
 
-Codex Profile Overlay is local-only and must never upload, display, parse, or log `auth.json`.
+Codex VS Code Switcher is local-only and must never modify the user's main Codex/ChatGPT Desktop state or the original Codex Swap Account application state.
 
-## Credential Rules
+## Protected roots
 
-- Never commit `auth.json`, `.codex-profiles`, backups, logs, or local app data.
-- Tests must use temporary directories and dummy `auth.json` contents only.
-- Profile metadata in `%LOCALAPPDATA%\CodexProfileOverlay\profiles.json` may contain display names, order, initials, and local accent choices only.
-- Manual status metadata and cached normalized usage snapshots belong only in `%LOCALAPPDATA%\CodexProfileOverlay\profile-status.json`, never beside profile credentials.
-- The automatic usage provider may use only a profile-isolated local `codex app-server` process and the structured `account/rateLimits/read` protocol response.
-- Usage providers must discard raw terminal output immediately after parsing recognized limit rows. Undocumented endpoints, browser scraping/cookies, raw responses, and credential parsing are prohibited.
-- Cached usage snapshots may contain only limit labels, remaining percentages, reset timestamps, capture timestamp, Codex CLI version, and the sanitized source identifier `codex-cli-status`.
-- Provider logs may contain only an internal profile identifier, timestamps, capability/result category, sanitized error category, and snapshot age. They must never contain account email, session ID, model, permissions, directory, project path, or auth contents.
-- Logs must stay token-safe and must not include raw exception stacks for normal user flows.
-- Normal switch backups may contain only the previous authorization, active-profile metadata, and a hash/timestamp transaction manifest. They must never contain sessions, rollout files, attachments, memories, databases, logs, caches, settings, browser state, or project data.
-- Backup creation rejects an individual file over 10 MB and a switch backup over 25 MB before changing account state. Completed retention is limited to five backups, seven days, and 100 MB total; active transactions are never deleted.
-- Legacy cleanup is restricted to recognized `state-*` children of `%LOCALAPPDATA%\CodexProfileOverlay\backups`, requires explicit confirmation, and retains the two newest. It must never target `%USERPROFILE%\.codex` or `%USERPROFILE%\.codex-profiles`.
-- Run `.\verify-repository-safety.ps1` before staging or publishing changes.
+All reads used as copy sources and every write, replace, move, delete, or backup operation must reject these roots and their descendants:
+
+```text
+%USERPROFILE%\.codex
+%LOCALAPPDATA%\CodexProfileOverlay
+```
+
+Paths are normalized, compared case-insensitively on Windows, checked after `..` resolution and separator normalization, and rejected when an existing path segment is a reparse point.
+
+## Dedicated data
+
+Mutable application state belongs under `%LOCALAPPDATA%\CodexVsCodeSwitcher`. Dedicated profile homes belong under `%USERPROFILE%\.codex-vscode-profiles`.
+
+The legacy `%USERPROFILE%\.codex-profiles` source is read-only. Migration is not executed in this bootstrap build.
+
+## Credentials and backups
+
+- Never commit, display, upload, or log real authentication contents.
+- Tests use only dummy data in temporary directories.
+- Backups accept only explicit top-level `auth.json` and `config.toml` inputs from the dedicated profile root.
+- Maximum file size is 10 MB; maximum transaction size is 25 MB.
+- Retention is limited to five completed backups and 100 MB.
+- Sessions, rollout JSONL, databases, attachments, logs, and caches are forbidden.
+- Recursive `CODEX_HOME` copying is not available.
+
+## Runtime
+
+The bootstrap runtime does not locate, launch, close, kill, restart, or attach to ChatGPT/Codex Desktop or VS Code. Selecting a profile fails safely without filesystem mutation.
+
+Automatic updates are disabled until a new update channel is explicitly configured.
+
+Run `.\verify-repository-safety.ps1`, tests, and a Release build before publishing.
 
 ## Reporting
 
-Please report credential exposure privately. Do not attach real `auth.json` files, screenshots containing tokens, browser cookies, or account credentials.
+Report credential exposure privately. Never attach real authentication files, cookies, tokens, or screenshots containing credentials.

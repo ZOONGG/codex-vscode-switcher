@@ -15,8 +15,8 @@ if (-not $dotnet) {
     throw "dotnet was not found. Install .NET 8 SDK or run the local SDK bootstrap used by this repository."
 }
 
-& $dotnet.Source build (Join-Path $repo "CodexProfileOverlay.sln") -c $Configuration -p:Platform=x64
+& $dotnet.Source build (Join-Path $repo "CodexVsCodeSwitcher.sln") -c $Configuration -p:Platform=x64
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-& $dotnet.Source test (Join-Path $repo "CodexProfileOverlay.sln") -c $Configuration -p:Platform=x64 --no-build
+& $dotnet.Source test (Join-Path $repo "CodexVsCodeSwitcher.sln") -c $Configuration -p:Platform=x64 --no-build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

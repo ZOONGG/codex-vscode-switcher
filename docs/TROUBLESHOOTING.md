@@ -1,19 +1,21 @@
 # Troubleshooting
 
-## Overlay Does Not Appear
+## Profile selection says the backend is not implemented
 
-- Confirm Codex desktop is running and not minimized.
-- Use the tray icon and choose **Show switcher**.
-- Open Settings and reset the overlay position.
+This is expected in the bootstrap build. No authentication file was changed.
 
-## Codex Does Not Launch
+## A profile does not appear
 
-The app first tries the installed Start menu Codex entry, then falls back to `codex app` from `PATH`.
+Only valid directories under `%USERPROFILE%\.codex-vscode-profiles` containing a top-level `auth.json` are listed. Automatic migration is intentionally disabled.
 
-## Hotkey Conflict
+## The overlay is hidden
 
-Open Settings and change or clear the conflicting hotkey. The app does not override combinations owned by another application.
+Use the tray icon or the configured global hotkey. Enable **Show switcher on start** in Settings.
 
-## Profile Does Not Appear
+## VS Code fields do not launch anything
 
-Only directories under `%USERPROFILE%\.codex-profiles` containing an `auth.json` file are shown as ready profiles.
+The fields are prepared settings for the later backend. Detection, launch, switching, and attachment are not implemented yet.
+
+## Logs
+
+Sanitized logs are stored under `%LOCALAPPDATA%\CodexVsCodeSwitcher\logs`.

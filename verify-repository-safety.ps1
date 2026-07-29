@@ -12,9 +12,12 @@ $forbiddenPaths = @(
     'settings.json',
     'profiles.json',
     '.codex-profiles',
+    '.codex-vscode-profiles',
     'removed-profiles',
-    'preflight-backups',
     'backups',
+    'transactions',
+    'VSCodeData',
+    'VSCodeExtensions',
     'logs'
 )
 
@@ -35,7 +38,8 @@ $failures = New-Object System.Collections.Generic.List[string]
 foreach ($path in $tracked) {
     $normalized = $path -replace '\\', '/'
     foreach ($forbidden in $forbiddenPaths) {
-        if ($normalized -like "*$forbidden*") {
+        $forbiddenSegment = [regex]::Escape($forbidden)
+        if ($normalized -match "(?i)(^|/)$forbiddenSegment($|/)") {
             $failures.Add("forbidden-path: $normalized")
         }
     }

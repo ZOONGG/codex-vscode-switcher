@@ -1,0 +1,33 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexVsCodeSwitcher", "src\CodexVsCodeSwitcher\CodexVsCodeSwitcher.csproj", "{A3C1502B-F139-45D8-9F0B-52BF2FC94F2D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexVsCodeSwitcher.Core", "src\CodexVsCodeSwitcher.Core\CodexVsCodeSwitcher.Core.csproj", "{E430A484-1B86-4BC4-AFBF-70A1DB2F2A85}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexVsCodeSwitcher.Tests", "tests\CodexVsCodeSwitcher.Tests\CodexVsCodeSwitcher.Tests.csproj", "{D55B47B6-A60E-4554-B030-314675398350}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A3C1502B-F139-45D8-9F0B-52BF2FC94F2D}.Debug|x64.ActiveCfg = Debug|x64
+		{A3C1502B-F139-45D8-9F0B-52BF2FC94F2D}.Debug|x64.Build.0 = Debug|x64
+		{A3C1502B-F139-45D8-9F0B-52BF2FC94F2D}.Release|x64.ActiveCfg = Release|x64
+		{A3C1502B-F139-45D8-9F0B-52BF2FC94F2D}.Release|x64.Build.0 = Release|x64
+		{E430A484-1B86-4BC4-AFBF-70A1DB2F2A85}.Debug|x64.ActiveCfg = Debug|x64
+		{E430A484-1B86-4BC4-AFBF-70A1DB2F2A85}.Debug|x64.Build.0 = Debug|x64
+		{E430A484-1B86-4BC4-AFBF-70A1DB2F2A85}.Release|x64.ActiveCfg = Release|x64
+		{E430A484-1B86-4BC4-AFBF-70A1DB2F2A85}.Release|x64.Build.0 = Release|x64
+		{D55B47B6-A60E-4554-B030-314675398350}.Debug|x64.ActiveCfg = Debug|x64
+		{D55B47B6-A60E-4554-B030-314675398350}.Debug|x64.Build.0 = Debug|x64
+		{D55B47B6-A60E-4554-B030-314675398350}.Release|x64.ActiveCfg = Release|x64
+		{D55B47B6-A60E-4554-B030-314675398350}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

@@ -15,10 +15,10 @@ assignees: ""
 ## Environment
 
 - Windows version:
-- Codex Profile Overlay version:
-- Codex desktop install type:
+- Codex VS Code Switcher version:
+- Build type (portable/source):
 - Monitors and DPI scaling:
 
 ## Logs
 
-Do not attach `auth.json` or screenshots containing credentials.
+Do not attach authentication files, profile homes, logs containing private data, or screenshots containing credentials.

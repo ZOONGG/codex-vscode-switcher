@@ -19,27 +19,40 @@ if (-not $dotnet) {
 if ([string]::IsNullOrWhiteSpace($Output)) {
     $Output = Join-Path $repo "artifacts\publish"
 }
+$artifactRoot = [System.IO.Path]::GetFullPath((Join-Path $repo "artifacts"))
+$Output = [System.IO.Path]::GetFullPath($Output)
+if (-not $Output.StartsWith($artifactRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Publish output must stay inside $artifactRoot."
+}
 
 if (Test-Path -LiteralPath $Output) {
     Remove-Item -LiteralPath $Output -Recurse -Force
 }
 
-& $dotnet.Source publish (Join-Path $repo "src\CodexProfileOverlay\CodexProfileOverlay.csproj") `
+& $dotnet.Source publish (Join-Path $repo "src\CodexVsCodeSwitcher\CodexVsCodeSwitcher.csproj") `
     -c $Configuration `
     -r win-x64 `
     --self-contained true `
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true `
+    -p:DebugType=None `
+    -p:DebugSymbols=false `
     -p:Platform=x64 `
     -o $Output
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-$zip = Join-Path $repo "artifacts\CodexProfileOverlay-win-x64-portable.zip"
+$zip = Join-Path $repo "artifacts\CodexVsCodeSwitcher-win-x64-portable.zip"
 if (Test-Path -LiteralPath $zip) {
     Remove-Item -LiteralPath $zip -Force
 }
 Compress-Archive -Path (Join-Path $Output "*") -DestinationPath $zip -Force
+
+$checksums = @(
+    "$(Get-FileHash -LiteralPath (Join-Path $Output 'CodexVsCodeSwitcher.exe') -Algorithm SHA256 | Select-Object -ExpandProperty Hash)  artifacts/publish/CodexVsCodeSwitcher.exe",
+    "$(Get-FileHash -LiteralPath $zip -Algorithm SHA256 | Select-Object -ExpandProperty Hash)  artifacts/CodexVsCodeSwitcher-win-x64-portable.zip"
+)
+[System.IO.File]::WriteAllLines((Join-Path $repo "artifacts\SHA256SUMS.txt"), $checksums, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "Published to $Output"
 Write-Host "Portable zip: $zip"

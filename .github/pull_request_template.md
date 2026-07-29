@@ -8,5 +8,6 @@
 ## Safety
 
 - [ ] No `auth.json` or credential material committed
-- [ ] Normal Codex launch does not set `CODEX_HOME`
-- [ ] Shared `.codex` data remains shared
+- [ ] Main `.codex` and original app-data roots remain protected
+- [ ] All writes use the centralized storage layout and protected-path policy
+- [ ] Bootstrap code does not claim or perform real VS Code switching

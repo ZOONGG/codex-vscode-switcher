@@ -1,6 +1,8 @@
 **/auth.json
 **/.codex-profiles/
 .codex-profiles/
+**/.codex-vscode-profiles/
+.codex-vscode-profiles/
 **/active-profile.txt
 **/settings.json
 **/profiles.json
@@ -8,6 +10,9 @@
 **/backups/
 **/removed-profiles/
 **/preflight-backups/
+**/transactions/
+**/VSCodeData/
+**/VSCodeExtensions/
 **/*.token
 **/*.tokens
 **/*.secret
