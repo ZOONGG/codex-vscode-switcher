@@ -67,7 +67,7 @@ public sealed class ProfileActivationService
         bool restartIfAlreadyActive,
         bool requireExtension,
         bool openCodexOnStartup,
-        Action<string>? progress = null,
+        IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)
     {
         if (!await ApplicationSwitchLock.WaitAsync(0, cancellationToken).ConfigureAwait(false))
@@ -117,7 +117,7 @@ public sealed class ProfileActivationService
         bool restartIfAlreadyActive,
         bool requireExtension,
         bool openCodexOnStartup,
-        Action<string>? progress,
+        IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
         ProfileStorageAudit selectedProfile;
@@ -206,7 +206,7 @@ public sealed class ProfileActivationService
 
         if (previousInstance is not null)
         {
-            progress?.Invoke("WaitingForVsCodeClose");
+            progress?.Report("WaitingForVsCodeClose");
             ManagedShutdownResult shutdown = await runtime.RequestCloseAsync(
                 previousInstance,
                 gracefulCloseTimeout,
@@ -220,7 +220,7 @@ public sealed class ProfileActivationService
             }
         }
 
-        progress?.Invoke("LaunchingManagedVsCode");
+        progress?.Report("LaunchingManagedVsCode");
         ProfileActivationResult launchResult = await LaunchAndCommitAsync(
             selectedProfile,
             executable,

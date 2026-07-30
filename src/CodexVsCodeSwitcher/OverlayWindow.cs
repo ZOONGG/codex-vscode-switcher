@@ -38,6 +38,7 @@ internal sealed class OverlayWindow : Window
     private IntPtr ownerHwnd;
     private bool isSwitching;
     private bool managedVsCodeRunning;
+    private string? pendingProfile;
     private string? switchingProfileDisplayName;
     private string? switchingStatusOverride;
     private OverlayDisplayMode resolvedAutoMode = OverlayDisplayMode.Expanded;
@@ -283,9 +284,15 @@ internal sealed class OverlayWindow : Window
         }
     }
 
-    public void SetSwitching(bool switching, string? profileDisplayName)
+    public void SetSwitching(
+        bool switching,
+        string? profileId,
+        string? profileDisplayName)
     {
         isSwitching = switching;
+        pendingProfile = switching && !string.IsNullOrWhiteSpace(profileId)
+            ? ProfileName.RequireValid(profileId)
+            : null;
         switchingProfileDisplayName = switching ? profileDisplayName : null;
         switchingStatusOverride = null;
         compactPopup.IsOpen = false;
@@ -518,6 +525,7 @@ internal sealed class OverlayWindow : Window
         foreach (ProfileInfo profile in profiles)
         {
             bool isActive = string.Equals(profile.Name, activeProfile, StringComparison.OrdinalIgnoreCase);
+            bool isPending = string.Equals(profile.Name, pendingProfile, StringComparison.OrdinalIgnoreCase);
             string indicator = GetProfileIndicator(profile.Name);
             Button item = CreateProfilePopupButton(profile, indicator, isActive);
             if (!string.IsNullOrEmpty(indicator))
@@ -525,6 +533,12 @@ internal sealed class OverlayWindow : Window
                 item.ToolTip = BuildUsageToolTip(profile.Name);
             }
             item.ToolTip = BuildProfileToolTip(profile);
+            if (isPending)
+            {
+                item.BorderBrush = FindBrush("AccentBrush");
+                item.BorderThickness = new Thickness(1);
+            }
+
             item.IsEnabled = !isActive && !isSwitching && profile.IsEligibleForSwitching;
             string name = profile.Name;
             item.Click += (_, _) =>
@@ -547,9 +561,14 @@ internal sealed class OverlayWindow : Window
 
     private Button CreateProfileButton(ProfileInfo profile, bool isActive)
     {
+        bool isPending = string.Equals(profile.Name, pendingProfile, StringComparison.OrdinalIgnoreCase);
         var avatar = CreateAvatar(profile.Initials, profile.Accent, 22);
-        avatar.BorderThickness = isActive ? new Thickness(1) : new Thickness(0);
-        avatar.BorderBrush = isActive ? FindBrush("StrongTextBrush") : Brushes.Transparent;
+        avatar.BorderThickness = isActive || isPending ? new Thickness(1) : new Thickness(0);
+        avatar.BorderBrush = isPending
+            ? FindBrush("AccentBrush")
+            : isActive
+                ? FindBrush("StrongTextBrush")
+                : Brushes.Transparent;
 
         var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         row.Children.Add(avatar);
@@ -599,9 +618,15 @@ internal sealed class OverlayWindow : Window
             MinHeight = 0,
             Margin = new Thickness(0, 0, 6, 0),
             Padding = isActive ? new Thickness(7, 0, 10, 0) : new Thickness(9, 0, 9, 0),
-            BorderThickness = isActive ? new Thickness(1) : new Thickness(0),
-            BorderBrush = isActive ? FindBrush("AccentHoverBrush") : Brushes.Transparent,
-            Background = isActive ? FindBrush("TabActiveBrush") : FindBrush("TabBackgroundBrush"),
+            BorderThickness = isActive || isPending ? new Thickness(1) : new Thickness(0),
+            BorderBrush = isPending
+                ? FindBrush("AccentBrush")
+                : isActive
+                    ? FindBrush("AccentHoverBrush")
+                    : Brushes.Transparent,
+            Background = isActive || isPending
+                ? FindBrush("TabActiveBrush")
+                : FindBrush("TabBackgroundBrush"),
             Cursor = isActive ? Cursors.Arrow : Cursors.Hand,
             Tag = profile.Name,
             ToolTip = BuildProfileToolTip(profile),

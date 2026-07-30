@@ -293,6 +293,59 @@ public sealed class ManagedVsCodeIntegrationTests
     }
 
     [Fact]
+    public async Task RepeatedSwitching_ActivatesAlphaBetaGammaAndAlphaAgain()
+    {
+        using var context = new ActivationContext();
+
+        ProfileActivationResult first = await context.ActivateAsync("alpha");
+        ProfileActivationResult second = await context.ActivateAsync("beta");
+        ProfileActivationResult third = await context.ActivateAsync("gamma");
+        ProfileActivationResult fourth = await context.ActivateAsync("alpha");
+
+        Assert.All(
+            new[] { first, second, third, fourth },
+            result => Assert.Equal(ProfileActivationStatus.Succeeded, result.Status));
+        Assert.Equal("alpha", context.Layout.ActiveProfileStore.Read());
+        Assert.Equal(4, context.Runtime.LaunchPlans.Count);
+        Assert.Equal(3, context.Runtime.ShutdownTargets.Count);
+    }
+
+    [Fact]
+    public async Task WindowTimeout_ReleasesSwitchLockAndAllowsRetry()
+    {
+        using var context = new ActivationContext();
+        context.Runtime.WaitResults.Enqueue(null);
+
+        ProfileActivationResult failure = await context.ActivateAsync("alpha");
+        ProfileActivationResult retry = await context.ActivateAsync("alpha");
+
+        Assert.Equal(ProfileActivationStatus.WindowNotFound, failure.Status);
+        Assert.Equal(ProfileActivationStatus.Succeeded, retry.Status);
+        Assert.Equal("alpha", context.Layout.ActiveProfileStore.Read());
+    }
+
+    [Fact]
+    public async Task Cancellation_ReleasesSwitchLockAndAllowsRetry()
+    {
+        using var context = new ActivationContext();
+        using var cancellation = new CancellationTokenSource();
+        context.Runtime.WaitHandler = async (_, cancellationToken) =>
+        {
+            cancellation.Cancel();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return null;
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => context.ActivateAsync("alpha", cancellationToken: cancellation.Token));
+
+        context.Runtime.WaitHandler = null;
+        ProfileActivationResult retry = await context.ActivateAsync("alpha");
+
+        Assert.Equal(ProfileActivationStatus.Succeeded, retry.Status);
+    }
+
+    [Fact]
     public async Task LaunchFailure_RollsBackPreviousProfileOnce()
     {
         using var context = new ActivationContext();
@@ -486,6 +539,7 @@ public sealed class ManagedVsCodeIntegrationTests
             ProfileDirectory = Path.Combine(Layout.Paths.ProfilesDirectory, "alpha");
             Layout.AddProfile("alpha", "{\"fake\":true}");
             Layout.AddProfile("beta", "{\"fake\":true}");
+            Layout.AddProfile("gamma", "{\"fake\":true}");
             File.WriteAllText(ExecutablePath, string.Empty);
             Directory.CreateDirectory(Layout.Paths.VsCodeUserDataDirectory);
             Directory.CreateDirectory(Layout.Paths.VsCodeExtensionsDirectory);
@@ -517,7 +571,10 @@ public sealed class ManagedVsCodeIntegrationTests
         public FakeExtensionManager ExtensionManager { get; }
         public ProfileActivationService Service { get; }
 
-        public Task<ProfileActivationResult> ActivateAsync(string profile, string? workspace = null)
+        public Task<ProfileActivationResult> ActivateAsync(
+            string profile,
+            string? workspace = null,
+            CancellationToken cancellationToken = default)
             => Service.ActivateAsync(
                 profile,
                 ExecutablePath,
@@ -527,7 +584,8 @@ public sealed class ManagedVsCodeIntegrationTests
                 TimeSpan.FromMilliseconds(50),
                 restartIfAlreadyActive: false,
                 requireExtension: true,
-                openCodexOnStartup: true);
+                openCodexOnStartup: true,
+                cancellationToken: cancellationToken);
 
         public void ConfigurePreviousManagedProfile(string profile)
         {

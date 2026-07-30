@@ -204,7 +204,7 @@ internal sealed class OverlayController : IDisposable
         IDisposable switchingVisibility =
             visibilityLeases.Acquire(OverlayVisibilityReason.ProfileSwitchingStatus);
         ReconcileOverlayVisibility();
-        overlayWindow?.SetSwitching(true, displayName);
+        overlayWindow?.SetSwitching(true, profile, displayName);
         try
         {
             if (!await EnsureCodexExtensionForLaunchAsync(displayName).ConfigureAwait(true))
@@ -226,7 +226,8 @@ internal sealed class OverlayController : IDisposable
                     restartIfActive,
                     requireExtension: true,
                     openCodexOnStartup: settings.LaunchCodexSidebarOnStartup,
-                    progress: key => overlayWindow?.SetSwitchingStatus(localizer[key]),
+                    progress: new Progress<string>(
+                        key => overlayWindow?.SetSwitchingStatus(localizer[key])),
                     cancellationToken: disposalTokenSource.Token)
                 .ConfigureAwait(true);
             string message = localizer[result.MessageKey];
@@ -257,7 +258,7 @@ internal sealed class OverlayController : IDisposable
         }
         finally
         {
-            overlayWindow?.SetSwitching(false, null);
+            overlayWindow?.SetSwitching(false, null, null);
             launchWorkflowLock.Release();
             switchingVisibility.Dispose();
             ReconcileOverlayVisibility();

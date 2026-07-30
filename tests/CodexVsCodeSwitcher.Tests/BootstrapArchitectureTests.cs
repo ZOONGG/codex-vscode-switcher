@@ -80,6 +80,21 @@ public sealed class BootstrapArchitectureTests
     }
 
     [Fact]
+    public void ActivationProgress_IsMarshaledBackToTheWpfContext()
+    {
+        string controller = ReadRepositoryFile(
+            "src",
+            "CodexVsCodeSwitcher",
+            "OverlayController.cs");
+
+        Assert.Contains("new Progress<string>", controller, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "progress: key => overlayWindow?.SetSwitchingStatus",
+            controller,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Runtime_DoesNotQueryOrControlChatGptDesktop()
     {
         string root = FindRepositoryRoot();
