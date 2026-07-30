@@ -12,6 +12,7 @@ The managed instance always launches with:
 Code.exe
   --user-data-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeData"
   --extensions-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeExtensions"
+  --shared-data-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeSharedData"
   --new-window
   [optional folder or .code-workspace]
 ```
@@ -38,7 +39,7 @@ A window is managed only when all of the following remain valid:
 
 - the persisted root PID and process start time match;
 - the executable path exactly matches the configured/detected VS Code executable;
-- the root command line contains the exact dedicated `--user-data-dir` and `--extensions-dir`;
+- the root command line contains the exact dedicated `--user-data-dir`, `--extensions-dir`, and `--shared-data-dir`;
 - the window belongs to the launched root process or a verified descendant;
 - the HWND is a visible top-level window owned by that verified process tree.
 
@@ -58,6 +59,8 @@ By default the overlay:
 
 Auto, Compact, Expanded, dragging, scale, offsets, saved position, DPI, multi-monitor placement, and reset-position remain available.
 
+Opening Settings creates an explicit interactive preview lease. Layout, orientation, widths, scale, offsets, and position update live even when Codex VS Code is not running. Closing Settings immediately restores managed-window-only visibility; preview never attaches to the Settings window and never launches a profile.
+
 ## Profile switching
 
 Profile switches are serialized and transactional:
@@ -72,6 +75,8 @@ Profile switches are serialized and transactional:
 
 Force-close is not used by the normal workflow.
 
+Clicking a profile starts this flow directly. The clicked profile is Pending until its new window is verified, then becomes Active. Success, failure, timeout, and cancellation all release the switch lock and re-enable profile controls.
+
 ## Codex extension and workspaces
 
 The dedicated environment detects the official Marketplace extension `openai.chatgpt`. Installation occurs only after the explicit **Install Codex extension** action and targets only the dedicated extension directory.
@@ -79,6 +84,10 @@ The dedicated environment detects the official Marketplace extension `openai.cha
 The dedicated `User\settings.json` is updated atomically while preserving unrelated valid settings. `chatgpt.openOnStartup` is configured only there.
 
 The switcher supports a folder, a `.code-workspace` file, or an empty window. A missing remembered workspace is reported without silently erasing it.
+
+**Import my VS Code setup** is optional and confirmation-only. Its preview lists the allowed settings, keybindings, snippets, named-profile files, and extension count. It never copies storage databases, sessions, credentials, cookies, machine identifiers, logs, or temporary files. Chosen extension IDs are installed separately into the dedicated extensions directory.
+
+**Reset Codex VS Code runtime state** clears only stale PID/start-time/HWND metadata after verifying that no exact managed instance is running. It preserves profiles, credentials, workspaces, settings, and extensions. **Create Codex VS Code shortcut** adds a separate desktop shortcut and does not replace the ordinary Visual Studio Code shortcut.
 
 ## Build and test
 
@@ -89,6 +98,7 @@ Requirements: Windows 10/11 x64, PowerShell, and .NET 8 SDK. A repository-local 
 .\build.ps1
 .\verify-repository-safety.ps1
 .\publish.ps1
+.\publish.ps1 -ArtifactLabel real-e2e-test
 ```
 
 Published files:

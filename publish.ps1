@@ -1,6 +1,7 @@
 param(
     [string]$Configuration = "Release",
-    [string]$Output = ""
+    [string]$Output = "",
+    [string]$ArtifactLabel = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,11 +49,27 @@ if (Test-Path -LiteralPath $zip) {
 }
 Compress-Archive -Path (Join-Path $Output "*") -DestinationPath $zip -Force
 
+$labeledZip = $null
+if (-not [string]::IsNullOrWhiteSpace($ArtifactLabel)) {
+    if ($ArtifactLabel -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$') {
+        throw "ArtifactLabel contains unsupported characters."
+    }
+
+    $labeledZip = Join-Path $repo "artifacts\CodexVsCodeSwitcher-$ArtifactLabel-win-x64-portable.zip"
+    Copy-Item -LiteralPath $zip -Destination $labeledZip -Force
+}
+
 $checksums = @(
     "$(Get-FileHash -LiteralPath (Join-Path $Output 'CodexVsCodeSwitcher.exe') -Algorithm SHA256 | Select-Object -ExpandProperty Hash)  artifacts/publish/CodexVsCodeSwitcher.exe",
     "$(Get-FileHash -LiteralPath $zip -Algorithm SHA256 | Select-Object -ExpandProperty Hash)  artifacts/CodexVsCodeSwitcher-win-x64-portable.zip"
 )
+if ($null -ne $labeledZip) {
+    $checksums += "$(Get-FileHash -LiteralPath $labeledZip -Algorithm SHA256 | Select-Object -ExpandProperty Hash)  artifacts/$(Split-Path -Leaf $labeledZip)"
+}
 [System.IO.File]::WriteAllLines((Join-Path $repo "artifacts\SHA256SUMS.txt"), $checksums, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "Published to $Output"
 Write-Host "Portable zip: $zip"
+if ($null -ne $labeledZip) {
+    Write-Host "Labeled test zip: $labeledZip"
+}

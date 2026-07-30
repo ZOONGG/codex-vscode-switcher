@@ -16,6 +16,8 @@ Use **Install Codex extension**. Network access occurs only after that explicit 
 
 The default policy shows it only while a verified managed VS Code window is foreground. The tray remains available. Check that managed VS Code is running, restored, and focused.
 
+While Settings is open, an explicit floating preview remains visible even without Codex VS Code. If it persists after Settings closes, reopen and close Settings once, then use **Reset Codex VS Code runtime state**.
+
 ## VS Code did not close
 
 Save or discard changes in the managed VS Code window, then try again. The switcher does not force-close by default.
@@ -27,3 +29,5 @@ Choose another folder or `.code-workspace`, or explicitly open an empty window. 
 ## Logs
 
 Sanitized logs are stored under `%LOCALAPPDATA%\CodexVsCodeSwitcher\logs`.
+
+Use **Copy diagnostics** for the allowlisted category, paths, profile/workspace, PID/start time, timeout stage, and sanitized exception only. If a launch remains stale, close the exact Codex VS Code instance and use **Reset Codex VS Code runtime state**; this does not remove profiles, credentials, settings, workspaces, or extensions.

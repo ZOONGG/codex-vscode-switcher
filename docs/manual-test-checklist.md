@@ -2,26 +2,20 @@
 
 Use the local portable build only after automated verification completes. Do not run this checklist from the VS Code window used to build the switcher.
 
-1. Close the development VS Code window or continue from a different ordinary VS Code window.
-2. Launch `artifacts\publish\CodexVsCodeSwitcher.exe`.
-3. Open Settings and confirm the managed status is **not running**.
-4. If needed, use **Install Codex extension** and confirm a version is detected in the dedicated environment.
-5. Choose one real profile.
-6. Launch managed VS Code.
-7. Confirm the Codex sidebar opens under the expected account.
-8. Open a test repository and remember its path.
-9. Switch to a second profile.
-10. Confirm only managed VS Code restarts.
-11. Confirm the same repository reopens.
+1. Start `artifacts\publish\CodexVsCodeSwitcher.exe`.
+2. Open Settings and confirm the overlay remains visible and interactive.
+3. Change scale, compact/expanded widths, Auto/Compact/Expanded, orientation, position, and offsets; confirm every change appears live.
+4. Reset position, close Settings, focus ChatGPT/Explorer, and confirm the overlay immediately returns to Codex-VS-Code-only visibility.
+5. Select profile A and launch Codex VS Code.
+6. Confirm the expected account manually in the Codex sidebar.
+7. Open a test repository, then click profile B directly in the overlay.
+8. Confirm only Codex VS Code restarts and the same repository returns.
+9. Click profile C, then switch back to profile A.
+10. Cause one harmless failure (for example, cancel an unsaved-file close) and confirm profile buttons never remain disabled.
+11. Confirm ordinary VS Code remains open and unaffected.
 12. Confirm ChatGPT Desktop remains on the main account.
-13. Confirm every ordinary VS Code window remains open.
-14. Focus ChatGPT and Explorer; confirm the overlay disappears immediately.
-15. Focus managed VS Code; confirm the overlay returns.
-16. Minimize managed VS Code; confirm the overlay hides. Restore and focus it; confirm the overlay returns.
-17. Test Auto, Compact, Expanded, drag, scale, offsets, and reset position.
-18. Open overlay menus and click its controls; confirm it does not flicker or disappear.
-19. Test a folder workspace, a `.code-workspace` file, and an explicitly empty managed window.
-20. With a disposable unsaved file, start a switch and confirm VS Code can block shutdown until you save or discard.
-21. Switch through all four profiles.
+13. Test **Import my VS Code setup**; inspect the preview before confirming and verify selected customizations appear only in Codex VS Code.
+14. Close Codex VS Code deliberately, use **Reset Codex VS Code runtime state**, and confirm profiles/settings/extensions remain.
+15. Optionally create the **Codex VS Code** shortcut and confirm it launches the last profile or chooser without replacing the ordinary VS Code shortcut.
 
 Do not include account emails, authentication values, tokens, session identifiers, or screenshots containing credentials in test notes.

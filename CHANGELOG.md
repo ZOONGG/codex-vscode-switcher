@@ -4,6 +4,10 @@
 
 ### Added
 
+- Explicit Settings preview visibility with live layout, orientation, width, scale, offset, and position updates.
+- Sanitized structured activation diagnostics, log/diagnostic actions, and safe runtime-state reset.
+- Optional allowlist-only VS Code customization import and a separate `Codex VS Code` desktop shortcut.
+- Dedicated `--shared-data-dir` isolation for current VS Code builds.
 - One-step first launch now detects VS Code through its PATH CLI shim, asks for the profile in-app, and offers an explicit install-and-continue action when the dedicated Codex extension is missing.
 - Real isolated VS Code launch with dedicated data/extensions, child-only `CODEX_HOME`, workspace restoration, and official Codex extension detection/install.
 - Transactional profile switching with graceful managed-only shutdown, verified-window success criteria, application-wide serialization, and one-shot rollback.
@@ -34,6 +38,10 @@
 
 ### Fixed
 
+- Repeated real profile switches no longer fail when background activation progress crosses the WPF dispatcher boundary.
+- Profile Pending/Active state and the switch lock now recover after success, failure, timeout, and cancellation.
+- Launch failures now distinguish executable, access, shutdown, process-exit, no-window, and timeout causes.
+- Settings no longer hides the overlay while the user edits its appearance.
 - “Show switcher” now explains how to launch or focus managed VS Code instead of silently doing nothing while managed-only visibility is enabled.
 - Managed launch now follows VS Code’s verified child-process handoff instead of failing immediately when the short-lived launcher exits before the editor window appears.
 

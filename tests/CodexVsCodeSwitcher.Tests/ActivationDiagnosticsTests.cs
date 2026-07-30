@@ -21,7 +21,7 @@ public sealed class ActivationDiagnosticsTests
             [new ManagedProcessDiagnostic(42, DateTimeOffset.UnixEpoch)],
             "window-detection",
             "TimeoutException",
-            "access_token=secret-value for person@example.test");
+            "access_token=dummy for person@example.test");
 
         string formatted = ActivationDiagnosticsFormatter.Format(diagnostic);
 
@@ -42,7 +42,7 @@ public sealed class ActivationDiagnosticsTests
             message: access_token=<redacted> for <redacted-email>
             """,
             formatted);
-        Assert.DoesNotContain("secret-value", formatted, StringComparison.Ordinal);
+        Assert.DoesNotContain("dummy", formatted, StringComparison.Ordinal);
         Assert.DoesNotContain("person@", formatted, StringComparison.Ordinal);
         Assert.DoesNotContain("environment", formatted, StringComparison.OrdinalIgnoreCase);
     }
