@@ -25,7 +25,11 @@ public sealed class ManagedProcessIdentityPolicy
             && HasArgumentValue(
                 evidence.CommandLineArguments,
                 "--extensions-dir",
-                expected.ExtensionsDirectory);
+                expected.ExtensionsDirectory)
+            && HasArgumentValue(
+                evidence.CommandLineArguments,
+                "--shared-data-dir",
+                expected.SharedDataDirectory);
     }
 
     public bool IsManagedRootHandoffCandidate(
@@ -48,7 +52,11 @@ public sealed class ManagedProcessIdentityPolicy
             && HasArgumentValue(
                 evidence.CommandLineArguments,
                 "--extensions-dir",
-                expected.ExtensionsDirectory);
+                expected.ExtensionsDirectory)
+            && HasArgumentValue(
+                evidence.CommandLineArguments,
+                "--shared-data-dir",
+                expected.SharedDataDirectory);
     }
 
     public bool IsExactManagedProcessCandidate(
@@ -66,7 +74,11 @@ public sealed class ManagedProcessIdentityPolicy
             && HasArgumentValue(
                 evidence.CommandLineArguments,
                 "--extensions-dir",
-                expected.ExtensionsDirectory);
+                expected.ExtensionsDirectory)
+            && HasArgumentValue(
+                evidence.CommandLineArguments,
+                "--shared-data-dir",
+                expected.SharedDataDirectory);
     }
 
     private static bool HasArgumentValue(

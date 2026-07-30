@@ -54,6 +54,7 @@ public sealed class CodexExtensionManager : ICodexExtensionManager
         string executablePath,
         string userDataDirectory,
         string extensionsDirectory,
+        string sharedDataDirectory,
         CancellationToken cancellationToken)
     {
         if (!File.Exists(executablePath))
@@ -65,10 +66,16 @@ public sealed class CodexExtensionManager : ICodexExtensionManager
 
         protectedPaths.AssertCanWrite(userDataDirectory);
         protectedPaths.AssertCanWrite(extensionsDirectory);
+        protectedPaths.AssertCanWrite(sharedDataDirectory);
         Directory.CreateDirectory(userDataDirectory);
         Directory.CreateDirectory(extensionsDirectory);
+        Directory.CreateDirectory(sharedDataDirectory);
         VsCodeProcessStartSpec plan =
-            launchPlanBuilder.BuildExtensionInstall(executablePath, userDataDirectory, extensionsDirectory);
+            launchPlanBuilder.BuildExtensionInstall(
+                executablePath,
+                userDataDirectory,
+                extensionsDirectory,
+                sharedDataDirectory);
         int exitCode;
         try
         {

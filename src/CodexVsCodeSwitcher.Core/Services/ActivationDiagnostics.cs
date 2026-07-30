@@ -12,6 +12,7 @@ public sealed record ActivationDiagnostic(
     string? VsCodeExecutablePath,
     string DedicatedUserDataDirectory,
     string DedicatedExtensionsDirectory,
+    string DedicatedSharedDataDirectory,
     string ProfileId,
     string? WorkspacePath,
     IReadOnlyList<ManagedProcessDiagnostic> Processes,
@@ -67,6 +68,7 @@ public static class ActivationDiagnosticsFormatter
         Add(output, "vsCodeExecutablePath", diagnostic.VsCodeExecutablePath);
         Add(output, "dedicatedUserDataDirectory", diagnostic.DedicatedUserDataDirectory);
         Add(output, "dedicatedExtensionsDirectory", diagnostic.DedicatedExtensionsDirectory);
+        Add(output, "dedicatedSharedDataDirectory", diagnostic.DedicatedSharedDataDirectory);
         Add(output, "profileId", diagnostic.ProfileId);
         Add(output, "workspacePath", diagnostic.WorkspacePath);
         foreach (ManagedProcessDiagnostic process in diagnostic.Processes)

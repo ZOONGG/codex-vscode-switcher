@@ -49,7 +49,11 @@ public sealed class ManagedVsCodeIntegrationTests
 
         VsCodeProcessStartSpec plan = BuildPlan(temp.Path, workspace: null);
 
-        Assert.Equal(5, plan.Arguments.Count);
+        Assert.Equal(7, plan.Arguments.Count);
+        AssertArgumentValue(
+            plan.Arguments,
+            "--shared-data-dir",
+            Path.Combine(temp.Path, "shared-data"));
         Assert.Equal("--new-window", plan.Arguments[^1]);
     }
 
@@ -61,7 +65,8 @@ public sealed class ManagedVsCodeIntegrationTests
         VsCodeProcessStartSpec plan = new VsCodeLaunchPlanBuilder().BuildExtensionInstall(
             Path.Combine(temp.Path, "Code.exe"),
             Path.Combine(temp.Path, "data"),
-            Path.Combine(temp.Path, "dedicated"));
+            Path.Combine(temp.Path, "dedicated"),
+            Path.Combine(temp.Path, "shared-data"));
 
         AssertArgumentValue(plan.Arguments, "--extensions-dir", Path.Combine(temp.Path, "dedicated"));
         Assert.DoesNotContain(ordinaryExtensions, plan.Arguments);
@@ -100,6 +105,8 @@ public sealed class ManagedVsCodeIntegrationTests
                 state.UserDataDirectory,
                 "--extensions-dir",
                 state.ExtensionsDirectory,
+                "--shared-data-dir",
+                state.SharedDataDirectory,
                 "--new-window",
             ]);
 
@@ -114,6 +121,25 @@ public sealed class ManagedVsCodeIntegrationTests
         var evidence = new ProcessIdentityEvidence(
             42,
             state.RootProcessStartTimeUtc.AddMinutes(1),
+            state.ExecutablePath,
+            [
+                "--user-data-dir",
+                state.UserDataDirectory,
+                "--extensions-dir",
+                state.ExtensionsDirectory,
+            ]);
+
+        Assert.False(new ManagedProcessIdentityPolicy().IsManagedRoot(state, evidence));
+    }
+
+    [Fact]
+    public void ManagedIdentity_RejectsProcessWithoutDedicatedSharedDataArgument()
+    {
+        using var temp = new TempDirectory();
+        ManagedVsCodeInstanceState state = State(temp.Path, processId: 42);
+        var evidence = new ProcessIdentityEvidence(
+            42,
+            state.RootProcessStartTimeUtc,
             state.ExecutablePath,
             [
                 "--user-data-dir",
@@ -158,6 +184,8 @@ public sealed class ManagedVsCodeIntegrationTests
                 $"--user-data-dir={state.UserDataDirectory}",
                 "--extensions-dir",
                 state.ExtensionsDirectory,
+                "--shared-data-dir",
+                state.SharedDataDirectory,
                 "--new-window",
             ]);
 
@@ -214,6 +242,8 @@ public sealed class ManagedVsCodeIntegrationTests
                 state.UserDataDirectory,
                 "--extensions-dir",
                 state.ExtensionsDirectory,
+                "--shared-data-dir",
+                state.SharedDataDirectory,
                 "--new-window",
             ]);
 
@@ -568,6 +598,7 @@ public sealed class ManagedVsCodeIntegrationTests
             Path.Combine(root, "Code.exe"),
             Path.Combine(root, "data"),
             Path.Combine(root, "extensions"),
+            Path.Combine(root, "shared-data"),
             Path.Combine(root, "profile"),
             workspace);
 
@@ -580,6 +611,7 @@ public sealed class ManagedVsCodeIntegrationTests
             Path.Combine(root, "Code.exe"),
             Path.Combine(root, "data"),
             Path.Combine(root, "extensions"),
+            Path.Combine(root, "shared-data"),
             0,
             DateTimeOffset.UtcNow);
 
@@ -607,6 +639,7 @@ public sealed class ManagedVsCodeIntegrationTests
             File.WriteAllText(ExecutablePath, string.Empty);
             Directory.CreateDirectory(Layout.Paths.VsCodeUserDataDirectory);
             Directory.CreateDirectory(Layout.Paths.VsCodeExtensionsDirectory);
+            Directory.CreateDirectory(Layout.Paths.VsCodeSharedDataDirectory);
             InstanceStore = new ManagedInstanceStore(Layout.Paths.ManagedInstanceMetadataFile, Layout.ProtectedPaths);
             WorkspaceHistory = new WorkspaceHistoryService(
                 Layout.Paths.LastWorkspaceMetadataFile,
@@ -644,6 +677,7 @@ public sealed class ManagedVsCodeIntegrationTests
                 ExecutablePath,
                 Layout.Paths.VsCodeUserDataDirectory,
                 Layout.Paths.VsCodeExtensionsDirectory,
+                Layout.Paths.VsCodeSharedDataDirectory,
                 workspace,
                 TimeSpan.FromMilliseconds(50),
                 restartIfAlreadyActive: false,
@@ -661,6 +695,7 @@ public sealed class ManagedVsCodeIntegrationTests
                 ExecutablePath,
                 Layout.Paths.VsCodeUserDataDirectory,
                 Layout.Paths.VsCodeExtensionsDirectory,
+                Layout.Paths.VsCodeSharedDataDirectory,
                 101,
                 DateTimeOffset.UtcNow);
             InstanceStore.Write(state);
@@ -693,6 +728,7 @@ public sealed class ManagedVsCodeIntegrationTests
             string executablePath,
             string userDataDirectory,
             string extensionsDirectory,
+            string sharedDataDirectory,
             CancellationToken cancellationToken)
         {
             InstallCalls++;
@@ -715,6 +751,7 @@ public sealed class ManagedVsCodeIntegrationTests
                 Path.GetFullPath("Code.exe"),
                 Path.GetFullPath("data"),
                 Path.GetFullPath("extensions"),
+                Path.GetFullPath("shared-data"),
                 1,
                 DateTimeOffset.UnixEpoch),
             new HashSet<int> { 1 },

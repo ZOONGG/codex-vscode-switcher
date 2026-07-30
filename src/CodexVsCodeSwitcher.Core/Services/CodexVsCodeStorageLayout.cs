@@ -18,6 +18,7 @@ public sealed class CodexVsCodeStorageLayout
         RemovedProfilesDirectory = Combine(ApplicationDataDirectory, "removed-profiles");
         VsCodeUserDataDirectory = Combine(ApplicationDataDirectory, "VSCodeData");
         VsCodeExtensionsDirectory = Combine(ApplicationDataDirectory, "VSCodeExtensions");
+        VsCodeSharedDataDirectory = Combine(ApplicationDataDirectory, "VSCodeSharedData");
         LastWorkspaceMetadataFile = Combine(ApplicationDataDirectory, "last-workspace.json");
         ManagedInstanceMetadataFile = Combine(ApplicationDataDirectory, "managed-vscode.json");
 
@@ -40,6 +41,7 @@ public sealed class CodexVsCodeStorageLayout
     public string RemovedProfilesDirectory { get; }
     public string VsCodeUserDataDirectory { get; }
     public string VsCodeExtensionsDirectory { get; }
+    public string VsCodeSharedDataDirectory { get; }
     public string LastWorkspaceMetadataFile { get; }
     public string ManagedInstanceMetadataFile { get; }
     public string ProfilesDirectory { get; }

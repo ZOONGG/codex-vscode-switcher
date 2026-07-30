@@ -34,6 +34,7 @@ public interface ICodexExtensionManager
         string executablePath,
         string userDataDirectory,
         string extensionsDirectory,
+        string sharedDataDirectory,
         CancellationToken cancellationToken);
 
     void ConfigureDedicatedSettings(string userDataDirectory, bool openOnStartup);

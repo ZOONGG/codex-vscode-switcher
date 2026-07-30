@@ -30,6 +30,7 @@ public sealed record ManagedVsCodeInstanceState(
     string ExecutablePath,
     string UserDataDirectory,
     string ExtensionsDirectory,
+    string SharedDataDirectory,
     long LastVerifiedWindowHandle,
     DateTimeOffset LaunchTimestampUtc);
 

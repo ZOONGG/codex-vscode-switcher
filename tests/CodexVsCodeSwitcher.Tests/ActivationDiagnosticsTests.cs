@@ -15,6 +15,7 @@ public sealed class ActivationDiagnosticsTests
             @"D:\Apps\Microsoft VS Code\Code.exe",
             @"C:\Temp\Switcher\Data",
             @"C:\Temp\Switcher\Extensions",
+            @"C:\Temp\Switcher\SharedData",
             "alpha",
             @"D:\Work\sample.code-workspace",
             [new ManagedProcessDiagnostic(42, DateTimeOffset.UnixEpoch)],
@@ -32,6 +33,7 @@ public sealed class ActivationDiagnosticsTests
             vsCodeExecutablePath: D:\Apps\Microsoft VS Code\Code.exe
             dedicatedUserDataDirectory: C:\Temp\Switcher\Data
             dedicatedExtensionsDirectory: C:\Temp\Switcher\Extensions
+            dedicatedSharedDataDirectory: C:\Temp\Switcher\SharedData
             profileId: alpha
             workspacePath: D:\Work\sample.code-workspace
             process: 42@1970-01-01T00:00:00.0000000+00:00
@@ -66,6 +68,7 @@ public sealed class ActivationDiagnosticsTests
             Path.Combine(layout.Paths.ApplicationDataDirectory, "Code.exe"),
             layout.Paths.VsCodeUserDataDirectory,
             layout.Paths.VsCodeExtensionsDirectory,
+            layout.Paths.VsCodeSharedDataDirectory,
             99,
             DateTimeOffset.UtcNow));
 

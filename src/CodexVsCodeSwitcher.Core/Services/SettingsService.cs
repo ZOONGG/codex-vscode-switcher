@@ -130,12 +130,14 @@ public sealed class SettingsService
         {
             settings.DedicatedVsCodeUserDataDirectory = layout.VsCodeUserDataDirectory;
             settings.DedicatedVsCodeExtensionsDirectory = layout.VsCodeExtensionsDirectory;
+            settings.DedicatedVsCodeSharedDataDirectory = layout.VsCodeSharedDataDirectory;
             settings.CodexProfileRoot = layout.ProfilesDirectory;
             settings.CustomVsCodeExecutablePath = NormalizeOptionalPath(settings.CustomVsCodeExecutablePath);
             settings.LastOpenedWorkspace = NormalizeOptionalPath(settings.LastOpenedWorkspace);
 
             protectedPaths?.AssertCanWrite(settings.DedicatedVsCodeUserDataDirectory);
             protectedPaths?.AssertCanWrite(settings.DedicatedVsCodeExtensionsDirectory);
+            protectedPaths?.AssertCanWrite(settings.DedicatedVsCodeSharedDataDirectory);
             protectedPaths?.AssertCanWrite(settings.CodexProfileRoot);
         }
 

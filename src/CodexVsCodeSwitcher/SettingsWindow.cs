@@ -473,6 +473,7 @@ internal sealed class SettingsWindow : Window
             PathInput(localizer["VsCodeExecutable"], localizer["VsCodeExecutableHelp"], settings.CustomVsCodeExecutablePath, value => settings.CustomVsCodeExecutablePath = value),
             ReadOnlyPath(localizer["VsCodeUserData"], localizer["VsCodeUserDataHelp"], settings.DedicatedVsCodeUserDataDirectory),
             ReadOnlyPath(localizer["VsCodeExtensions"], localizer["VsCodeExtensionsHelp"], settings.DedicatedVsCodeExtensionsDirectory),
+            ReadOnlyPath(localizer["VsCodeSharedData"], localizer["VsCodeSharedDataHelp"], settings.DedicatedVsCodeSharedDataDirectory),
             ReadOnlyPath(localizer["CodexProfileRoot"], localizer["CodexProfileRootHelp"], settings.CodexProfileRoot),
             PathInput(localizer["LastWorkspace"], localizer["LastWorkspaceHelp"], settings.LastOpenedWorkspace, value => settings.LastOpenedWorkspace = value),
             SettingCheck(localizer["ReopenLastWorkspace"], localizer["ReopenLastWorkspaceHelp"], settings.ReopenLastWorkspaceAfterSwitch, value => settings.ReopenLastWorkspaceAfterSwitch = value),

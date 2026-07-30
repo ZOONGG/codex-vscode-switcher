@@ -63,6 +63,7 @@ public sealed class ProfileActivationService
         string? configuredExecutablePath,
         string userDataDirectory,
         string extensionsDirectory,
+        string sharedDataDirectory,
         string? workspacePath,
         TimeSpan gracefulCloseTimeout,
         bool restartIfAlreadyActive,
@@ -83,6 +84,7 @@ public sealed class ProfileActivationService
                 configuredExecutablePath,
                 userDataDirectory,
                 extensionsDirectory,
+                sharedDataDirectory,
                 workspacePath,
                 gracefulCloseTimeout,
                 restartIfAlreadyActive,
@@ -113,6 +115,7 @@ public sealed class ProfileActivationService
         string? configuredExecutablePath,
         string userDataDirectory,
         string extensionsDirectory,
+        string sharedDataDirectory,
         string? workspacePath,
         TimeSpan gracefulCloseTimeout,
         bool restartIfAlreadyActive,
@@ -164,16 +167,21 @@ public sealed class ProfileActivationService
 
         string userData;
         string extensions;
+        string sharedData;
         try
         {
             userData = Path.GetFullPath(userDataDirectory);
             extensions = Path.GetFullPath(extensionsDirectory);
+            sharedData = Path.GetFullPath(sharedDataDirectory);
             protectedPaths.AssertCanWrite(userData);
             protectedPaths.AssertCanWrite(extensions);
+            protectedPaths.AssertCanWrite(sharedData);
             Directory.CreateDirectory(userData);
             Directory.CreateDirectory(extensions);
+            Directory.CreateDirectory(sharedData);
             AssertDirectoryWritable(userData);
             AssertDirectoryWritable(extensions);
+            AssertDirectoryWritable(sharedData);
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -258,6 +266,7 @@ public sealed class ProfileActivationService
             executable,
             userData,
             extensions,
+            sharedData,
             workspace,
             openCodexOnStartup,
             progress,
@@ -299,6 +308,7 @@ public sealed class ProfileActivationService
         string executable,
         string userData,
         string extensions,
+        string sharedData,
         string? workspace,
         bool openCodexOnStartup,
         IProgress<string>? progress,
@@ -311,6 +321,7 @@ public sealed class ProfileActivationService
                 executable,
                 userData,
                 extensions,
+                sharedData,
                 profile.DirectoryPath,
                 workspace);
             ManagedProcessIdentity launched = runtime.Launch(plan);
@@ -322,6 +333,7 @@ public sealed class ProfileActivationService
                 executable,
                 userData,
                 extensions,
+                sharedData,
                 0,
                 DateTimeOffset.UtcNow);
             instanceStore.Write(pendingState);
@@ -449,6 +461,7 @@ public sealed class ProfileActivationService
             previousState.ExecutablePath,
             previousState.UserDataDirectory,
             previousState.ExtensionsDirectory,
+            previousState.SharedDataDirectory,
             previousState.WorkspacePath,
             openCodexOnStartup,
             progress,

@@ -228,6 +228,7 @@ internal sealed class OverlayController : IDisposable
                     settings.CustomVsCodeExecutablePath,
                     settings.DedicatedVsCodeUserDataDirectory,
                     settings.DedicatedVsCodeExtensionsDirectory,
+                    settings.DedicatedVsCodeSharedDataDirectory,
                     workspace,
                     TimeSpan.FromSeconds(settings.GracefulCloseTimeoutSeconds),
                     restartIfActive,
@@ -274,6 +275,7 @@ internal sealed class OverlayController : IDisposable
                     ?? settings.CustomVsCodeExecutablePath,
                 settings.DedicatedVsCodeUserDataDirectory,
                 settings.DedicatedVsCodeExtensionsDirectory,
+                settings.DedicatedVsCodeSharedDataDirectory,
                 profile,
                 settings.LastOpenedWorkspace,
                 [],
@@ -349,6 +351,7 @@ internal sealed class OverlayController : IDisposable
             executable,
             settings.DedicatedVsCodeUserDataDirectory,
             settings.DedicatedVsCodeExtensionsDirectory,
+            settings.DedicatedVsCodeSharedDataDirectory,
             disposalTokenSource.Token).ConfigureAwait(true);
         lastExtensionActionStatus = result;
         string key = result.State == CodexExtensionState.Installed
@@ -367,6 +370,7 @@ internal sealed class OverlayController : IDisposable
                 executable,
                 settings.DedicatedVsCodeUserDataDirectory,
                 settings.DedicatedVsCodeExtensionsDirectory,
+                settings.DedicatedVsCodeSharedDataDirectory,
                 activeProfileStore.Read() ?? "none",
                 settings.LastOpenedWorkspace,
                 [],
@@ -854,6 +858,7 @@ internal sealed class OverlayController : IDisposable
                 ?? settings.CustomVsCodeExecutablePath,
             settings.DedicatedVsCodeUserDataDirectory,
             settings.DedicatedVsCodeExtensionsDirectory,
+            settings.DedicatedVsCodeSharedDataDirectory,
             profileId,
             workspace,
             result.Processes ?? [],
@@ -925,6 +930,7 @@ internal sealed class OverlayController : IDisposable
                 executable,
                 settings.DedicatedVsCodeUserDataDirectory,
                 settings.DedicatedVsCodeExtensionsDirectory,
+                settings.DedicatedVsCodeSharedDataDirectory,
                 plan.ExtensionIds,
                 disposalTokenSource.Token).ConfigureAwait(true);
             extensionManager.ConfigureDedicatedSettings(

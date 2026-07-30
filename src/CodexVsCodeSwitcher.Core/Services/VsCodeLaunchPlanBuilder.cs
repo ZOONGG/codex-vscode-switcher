@@ -10,12 +10,14 @@ public sealed class VsCodeLaunchPlanBuilder
         string executablePath,
         string userDataDirectory,
         string extensionsDirectory,
+        string sharedDataDirectory,
         string profileCodexHome,
         string? workspacePath)
     {
         string executable = RequireFullPath(executablePath, nameof(executablePath));
         string userData = RequireFullPath(userDataDirectory, nameof(userDataDirectory));
         string extensions = RequireFullPath(extensionsDirectory, nameof(extensionsDirectory));
+        string sharedData = RequireFullPath(sharedDataDirectory, nameof(sharedDataDirectory));
         string codexHome = RequireFullPath(profileCodexHome, nameof(profileCodexHome));
         string? workspace = string.IsNullOrWhiteSpace(workspacePath)
             ? null
@@ -27,6 +29,8 @@ public sealed class VsCodeLaunchPlanBuilder
             userData,
             "--extensions-dir",
             extensions,
+            "--shared-data-dir",
+            sharedData,
             "--new-window",
         };
         if (workspace is not null)
@@ -46,17 +50,20 @@ public sealed class VsCodeLaunchPlanBuilder
     public VsCodeProcessStartSpec BuildExtensionInstall(
         string executablePath,
         string userDataDirectory,
-        string extensionsDirectory)
+        string extensionsDirectory,
+        string sharedDataDirectory)
         => BuildExtensionInstall(
             executablePath,
             userDataDirectory,
             extensionsDirectory,
+            sharedDataDirectory,
             CodexExtensionManager.ExtensionId);
 
     public VsCodeProcessStartSpec BuildExtensionInstall(
         string executablePath,
         string userDataDirectory,
         string extensionsDirectory,
+        string sharedDataDirectory,
         string extensionId)
     {
         string normalizedExtensionId = RequireExtensionId(extensionId);
@@ -67,6 +74,8 @@ public sealed class VsCodeLaunchPlanBuilder
                 RequireFullPath(userDataDirectory, nameof(userDataDirectory)),
                 "--extensions-dir",
                 RequireFullPath(extensionsDirectory, nameof(extensionsDirectory)),
+                "--shared-data-dir",
+                RequireFullPath(sharedDataDirectory, nameof(sharedDataDirectory)),
                 "--install-extension",
                 normalizedExtensionId,
             ],

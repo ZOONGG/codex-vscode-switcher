@@ -21,6 +21,7 @@ public sealed class StorageIsolationTests
         Assert.Equal(Path.Combine(layout.ApplicationDataDirectory, "transactions"), layout.TransactionDirectory);
         Assert.Equal(Path.Combine(layout.ApplicationDataDirectory, "VSCodeData"), layout.VsCodeUserDataDirectory);
         Assert.Equal(Path.Combine(layout.ApplicationDataDirectory, "VSCodeExtensions"), layout.VsCodeExtensionsDirectory);
+        Assert.Equal(Path.Combine(layout.ApplicationDataDirectory, "VSCodeSharedData"), layout.VsCodeSharedDataDirectory);
     }
 
     [Fact]
@@ -59,6 +60,7 @@ public sealed class StorageIsolationTests
         {
             DedicatedVsCodeUserDataDirectory = Path.Combine(temp.Path, "other-data"),
             DedicatedVsCodeExtensionsDirectory = Path.Combine(temp.Path, "other-extensions"),
+            DedicatedVsCodeSharedDataDirectory = Path.Combine(temp.Path, "other-shared"),
             CodexProfileRoot = Path.Combine(temp.Path, "other-profiles"),
         };
 
@@ -66,6 +68,7 @@ public sealed class StorageIsolationTests
 
         Assert.Equal(layout.VsCodeUserDataDirectory, settings.DedicatedVsCodeUserDataDirectory);
         Assert.Equal(layout.VsCodeExtensionsDirectory, settings.DedicatedVsCodeExtensionsDirectory);
+        Assert.Equal(layout.VsCodeSharedDataDirectory, settings.DedicatedVsCodeSharedDataDirectory);
         Assert.Equal(layout.ProfilesDirectory, settings.CodexProfileRoot);
         Assert.True(settings.ShowOverlayOnlyWithManagedVsCode);
     }
@@ -84,6 +87,7 @@ public sealed class StorageIsolationTests
             Path.Combine(temp.Path, "Code.exe"),
             Path.Combine(temp.Path, "data"),
             Path.Combine(temp.Path, "extensions"),
+            Path.Combine(temp.Path, "shared-data"),
             profile,
             workspacePath: null);
 

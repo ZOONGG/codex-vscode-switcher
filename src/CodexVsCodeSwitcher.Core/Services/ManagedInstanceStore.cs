@@ -76,6 +76,7 @@ public sealed class ManagedInstanceStore : IManagedInstanceStore
             && Path.IsPathFullyQualified(state.ExecutablePath)
             && Path.IsPathFullyQualified(state.UserDataDirectory)
             && Path.IsPathFullyQualified(state.ExtensionsDirectory)
+            && Path.IsPathFullyQualified(state.SharedDataDirectory)
             && (state.WorkspacePath is null || Path.IsPathFullyQualified(state.WorkspacePath));
 
     private static ManagedVsCodeInstanceState Normalize(ManagedVsCodeInstanceState state)
@@ -84,6 +85,7 @@ public sealed class ManagedInstanceStore : IManagedInstanceStore
             ExecutablePath = Path.GetFullPath(state.ExecutablePath),
             UserDataDirectory = Path.GetFullPath(state.UserDataDirectory),
             ExtensionsDirectory = Path.GetFullPath(state.ExtensionsDirectory),
+            SharedDataDirectory = Path.GetFullPath(state.SharedDataDirectory),
             WorkspacePath = string.IsNullOrWhiteSpace(state.WorkspacePath)
                 ? null
                 : Path.GetFullPath(state.WorkspacePath),

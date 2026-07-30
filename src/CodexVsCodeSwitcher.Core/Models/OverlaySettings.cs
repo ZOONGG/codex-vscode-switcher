@@ -38,6 +38,8 @@ public sealed class OverlaySettings
 
     public string DedicatedVsCodeExtensionsDirectory { get; set; } = string.Empty;
 
+    public string DedicatedVsCodeSharedDataDirectory { get; set; } = string.Empty;
+
     public string CodexProfileRoot { get; set; } = string.Empty;
 
     public string LastOpenedWorkspace { get; set; } = string.Empty;

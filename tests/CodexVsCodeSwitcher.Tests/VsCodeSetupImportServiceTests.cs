@@ -76,6 +76,7 @@ public sealed class VsCodeSetupImportServiceTests
             executable,
             layout.Paths.VsCodeUserDataDirectory,
             layout.Paths.VsCodeExtensionsDirectory,
+            layout.Paths.VsCodeSharedDataDirectory,
             plan.ExtensionIds,
             CancellationToken.None);
 
@@ -116,6 +117,7 @@ public sealed class VsCodeSetupImportServiceTests
             Path.Combine(layout.LocalAppData, "Code.exe"),
             layout.Paths.VsCodeUserDataDirectory,
             layout.Paths.VsCodeExtensionsDirectory,
+            layout.Paths.VsCodeSharedDataDirectory,
             ["unconfirmed.extension"],
             CancellationToken.None);
 

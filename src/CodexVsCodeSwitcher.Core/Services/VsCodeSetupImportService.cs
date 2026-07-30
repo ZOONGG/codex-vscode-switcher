@@ -73,6 +73,7 @@ public sealed class VsCodeSetupImportService
         string executablePath,
         string dedicatedUserDataDirectory,
         string dedicatedExtensionsDirectory,
+        string dedicatedSharedDataDirectory,
         IReadOnlyCollection<string> selectedExtensionIds,
         CancellationToken cancellationToken)
     {
@@ -109,6 +110,7 @@ public sealed class VsCodeSetupImportService
                     executablePath,
                     dedicatedUserDataDirectory,
                     dedicatedExtensionsDirectory,
+                    dedicatedSharedDataDirectory,
                     requested);
                 int exitCode = await processRunner.RunAsync(install, cancellationToken).ConfigureAwait(false);
                 if (exitCode == 0)
@@ -291,6 +293,7 @@ public sealed class VsCodeSetupImportService
                     Path.GetFullPath("Code.exe"),
                     Path.GetFullPath("data"),
                     Path.GetFullPath("extensions"),
+                    Path.GetFullPath("shared-data"),
                     identifier);
                 if (!identifier.Equals(CodexExtensionManager.ExtensionId, StringComparison.OrdinalIgnoreCase))
                 {
