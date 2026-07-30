@@ -110,6 +110,9 @@ public sealed class SettingsServiceTests
         {
             Language = LanguagePreference.Russian,
             Theme = AppTheme.Light,
+            Orientation = OverlayOrientation.Vertical,
+            CompactWidth = 320,
+            ExpandedWidth = 720,
             SettingsWindowLeft = 120,
             SettingsWindowTop = 80,
             SettingsWindowWidth = 1120,
@@ -120,6 +123,9 @@ public sealed class SettingsServiceTests
 
         Assert.Equal(LanguagePreference.Russian, loaded.Language);
         Assert.Equal(AppTheme.Light, loaded.Theme);
+        Assert.Equal(OverlayOrientation.Vertical, loaded.Orientation);
+        Assert.Equal(320, loaded.CompactWidth);
+        Assert.Equal(720, loaded.ExpandedWidth);
         Assert.Equal(120, loaded.SettingsWindowLeft);
         Assert.Equal(80, loaded.SettingsWindowTop);
         Assert.Equal(1120, loaded.SettingsWindowWidth);
@@ -137,6 +143,8 @@ public sealed class SettingsServiceTests
             OffsetX = double.NaN,
             OffsetY = double.PositiveInfinity,
             Scale = double.NaN,
+            CompactWidth = 100,
+            ExpandedWidth = 5000,
             SettingsWindowLeft = double.NegativeInfinity,
             SettingsWindowTop = 120,
             SettingsWindowWidth = double.NaN,
@@ -153,6 +161,8 @@ public sealed class SettingsServiceTests
         Assert.Equal(396, loaded.OffsetX);
         Assert.Equal(2, loaded.OffsetY);
         Assert.Equal(1, loaded.Scale);
+        Assert.Equal(240, loaded.CompactWidth);
+        Assert.Equal(1000, loaded.ExpandedWidth);
         Assert.Equal(-1, loaded.SettingsWindowLeft);
         Assert.Equal(120, loaded.SettingsWindowTop);
         Assert.Equal(1000, loaded.SettingsWindowWidth);

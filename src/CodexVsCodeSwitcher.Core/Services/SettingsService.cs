@@ -111,6 +111,8 @@ public sealed class SettingsService
         settings.FloatingTop = NormalizeOptionalCoordinate(settings.FloatingTop);
         settings.FloatingMonitorId = NormalizeMonitorId(settings.FloatingMonitorId);
         settings.Scale = ClampFinite(settings.Scale, 0.8, 1.4, 1);
+        settings.CompactWidth = ClampFinite(settings.CompactWidth, 240, 520, 286);
+        settings.ExpandedWidth = ClampFinite(settings.ExpandedWidth, 360, 1000, 560);
         settings.SettingsWindowWidth = ClampFinite(settings.SettingsWindowWidth, 900, 1800, 1000);
         settings.SettingsWindowHeight = ClampFinite(settings.SettingsWindowHeight, 620, 1400, 720);
         settings.SettingsWindowLeft = NormalizeCoordinate(settings.SettingsWindowLeft, -1);

@@ -457,7 +457,11 @@ internal sealed class OverlayWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        bool vertical = settings.Orientation == OverlayOrientation.Vertical;
+        var panel = new StackPanel
+        {
+            Orientation = vertical ? Orientation.Vertical : Orientation.Horizontal,
+        };
         if (isSwitching)
         {
             panel.Children.Add(new TextBlock
@@ -488,6 +492,14 @@ internal sealed class OverlayWindow : Window
         foreach (ProfileInfo profile in profiles)
         {
             Button button = CreateProfileButton(profile, string.Equals(profile.Name, activeProfile, StringComparison.OrdinalIgnoreCase));
+            if (vertical)
+            {
+                button.MaxWidth = double.PositiveInfinity;
+                button.HorizontalAlignment = HorizontalAlignment.Stretch;
+                button.HorizontalContentAlignment = HorizontalAlignment.Left;
+                button.Margin = new Thickness(0, 0, 0, 4);
+            }
+
             panel.Children.Add(button);
             profileButtons.Add(button);
         }
@@ -495,10 +507,14 @@ internal sealed class OverlayWindow : Window
         var scrollViewer = new ScrollViewer
         {
             HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = vertical
+                ? ScrollBarVisibility.Auto
+                : ScrollBarVisibility.Disabled,
             CanContentScroll = true,
             Content = panel,
-            Height = 32,
+            Height = vertical
+                ? Math.Min(240, Math.Max(32, profiles.Count * 36))
+                : 32,
         };
         Grid.SetColumn(scrollViewer, 0);
 
@@ -1330,7 +1346,9 @@ internal sealed class OverlayWindow : Window
 
     private double SanitizedScale => double.IsFinite(settings.Scale) ? Math.Clamp(settings.Scale, 0.8, 1.4) : 1;
 
-    private double LogicalWidth => currentMode == OverlayDisplayMode.Compact ? 286 : 560;
+    private double LogicalWidth => currentMode == OverlayDisplayMode.Compact
+        ? settings.CompactWidth
+        : settings.ExpandedWidth;
 
     private void ApplyScale()
     {

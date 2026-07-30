@@ -4,6 +4,12 @@ public sealed class OverlaySettings
 {
     public OverlayDisplayMode DisplayMode { get; set; } = OverlayDisplayMode.Auto;
 
+    public OverlayOrientation Orientation { get; set; } = OverlayOrientation.Horizontal;
+
+    public double CompactWidth { get; set; } = 286;
+
+    public double ExpandedWidth { get; set; } = 560;
+
     public PositionPreset PositionPreset { get; set; } = PositionPreset.AfterMenu;
 
     public double OffsetX { get; set; } = 396;

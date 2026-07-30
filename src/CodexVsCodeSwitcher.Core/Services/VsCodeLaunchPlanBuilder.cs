@@ -47,7 +47,19 @@ public sealed class VsCodeLaunchPlanBuilder
         string executablePath,
         string userDataDirectory,
         string extensionsDirectory)
+        => BuildExtensionInstall(
+            executablePath,
+            userDataDirectory,
+            extensionsDirectory,
+            CodexExtensionManager.ExtensionId);
+
+    public VsCodeProcessStartSpec BuildExtensionInstall(
+        string executablePath,
+        string userDataDirectory,
+        string extensionsDirectory,
+        string extensionId)
     {
+        string normalizedExtensionId = RequireExtensionId(extensionId);
         return new VsCodeProcessStartSpec(
             RequireFullPath(executablePath, nameof(executablePath)),
             [
@@ -56,7 +68,7 @@ public sealed class VsCodeLaunchPlanBuilder
                 "--extensions-dir",
                 RequireFullPath(extensionsDirectory, nameof(extensionsDirectory)),
                 "--install-extension",
-                CodexExtensionManager.ExtensionId,
+                normalizedExtensionId,
             ],
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
     }
@@ -75,5 +87,22 @@ public sealed class VsCodeLaunchPlanBuilder
         }
 
         return fullPath;
+    }
+
+    private static string RequireExtensionId(string extensionId)
+    {
+        string value = extensionId?.Trim() ?? string.Empty;
+        int separator = value.IndexOf('.');
+        if (separator <= 0
+            || separator == value.Length - 1
+            || value.IndexOf('.', separator + 1) >= 0
+            || value.Any(static character =>
+                !(char.IsAsciiLetterOrDigit(character)
+                    || character is '-' or '_' or '.')))
+        {
+            throw new ArgumentException("The VS Code extension identifier is invalid.", nameof(extensionId));
+        }
+
+        return value;
     }
 }

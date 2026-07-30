@@ -42,6 +42,8 @@ internal sealed class SettingsWindow : Window
     private readonly Action launchEmptyWorkspace;
     private readonly Func<VsCodeIntegrationSnapshot> getIntegrationSnapshot;
     private readonly Action openDedicatedVsCodeData;
+    private readonly Action importVsCodeSetup;
+    private readonly Action createCodexVsCodeShortcut;
     private readonly Action copyDiagnostics;
     private readonly Action resetManagedRuntimeState;
     private readonly Action exitApplication;
@@ -58,6 +60,7 @@ internal sealed class SettingsWindow : Window
     private SettingsPage page = SettingsPage.General;
     private bool isRebuilding;
     private string? selectedStatusProfile;
+    private DateTimeOffset lastNumericPreviewAt;
 
     public SettingsWindow(
         OverlaySettings settings,
@@ -87,6 +90,8 @@ internal sealed class SettingsWindow : Window
         Action launchEmptyWorkspace,
         Func<VsCodeIntegrationSnapshot> getIntegrationSnapshot,
         Action openDedicatedVsCodeData,
+        Action importVsCodeSetup,
+        Action createCodexVsCodeShortcut,
         Action copyDiagnostics,
         Action resetManagedRuntimeState,
         Action exitApplication)
@@ -118,6 +123,8 @@ internal sealed class SettingsWindow : Window
         this.launchEmptyWorkspace = launchEmptyWorkspace;
         this.getIntegrationSnapshot = getIntegrationSnapshot;
         this.openDedicatedVsCodeData = openDedicatedVsCodeData;
+        this.importVsCodeSetup = importVsCodeSetup;
+        this.createCodexVsCodeShortcut = createCodexVsCodeShortcut;
         this.copyDiagnostics = copyDiagnostics;
         this.resetManagedRuntimeState = resetManagedRuntimeState;
         this.exitApplication = exitApplication;
@@ -493,6 +500,8 @@ internal sealed class SettingsWindow : Window
             (localizer["LaunchManagedVsCode"], "M 7 5 L 19 12 L 7 19 Z", launchManagedVsCode, true),
             (localizer["RestartManagedVsCode"], "M 19 8 A 8 8 0 1 0 20 14 M 19 8 L 19 3 M 19 8 L 14 8", restartManagedVsCode, false),
             (localizer["InstallCodexExtension"], "M 12 3 L 12 16 M 7 11 L 12 16 L 17 11 M 5 20 L 19 20", installCodexExtension, false),
+            (localizer["ImportVsCodeSetup"], "M 4 5 L 20 5 L 20 19 L 4 19 Z M 12 2 L 12 14 M 8 10 L 12 14 L 16 10", importVsCodeSetup, false),
+            (localizer["CreateCodexVsCodeShortcut"], "M 6 3 L 18 3 L 18 21 L 6 21 Z M 9 7 L 15 7 M 9 11 L 15 11", createCodexVsCodeShortcut, false),
             (localizer["OpenDedicatedVsCodeData"], "M 3 7 L 9 7 L 11 9 L 21 9 L 21 19 L 3 19 Z", openDedicatedVsCodeData, false),
             (localizer["OpenProfileRoot"], "M 3 7 L 9 7 L 11 9 L 21 9 L 21 19 L 3 19 Z", openProfilesFolder, false))));
         stack.Children.Add(Card(
@@ -514,6 +523,27 @@ internal sealed class SettingsWindow : Window
                 localizer["DisplayModeHelp"],
                 settings.DisplayMode,
                 value => overlayStateTransitions.SetDisplayMode(settings, value)),
+            EnumCombo(
+                localizer["OverlayOrientation"],
+                localizer["OverlayOrientationHelp"],
+                settings.Orientation,
+                value => settings.Orientation = value),
+            NumberInput(
+                localizer["CompactWidth"],
+                localizer["CompactWidthHelp"],
+                settings.CompactWidth,
+                value => settings.CompactWidth = value,
+                1,
+                240,
+                520),
+            NumberInput(
+                localizer["ExpandedWidth"],
+                localizer["ExpandedWidthHelp"],
+                settings.ExpandedWidth,
+                value => settings.ExpandedWidth = value,
+                1,
+                360,
+                1000),
             EnumCombo(localizer["PositionPreset"], localizer["PositionPresetHelp"], settings.PositionPreset, value => settings.PositionPreset = value, Rebuild),
         };
 
@@ -1138,6 +1168,12 @@ internal sealed class SettingsWindow : Window
             setter(next);
             box.Text = (dragStep < 1 ? next : Math.Round(next)).ToString("0.##", CultureInfo.InvariantCulture);
             box.CaretIndex = box.Text.Length;
+            if (DateTimeOffset.UtcNow - lastNumericPreviewAt >= TimeSpan.FromMilliseconds(50))
+            {
+                lastNumericPreviewAt = DateTimeOffset.UtcNow;
+                Save();
+            }
+
             e.Handled = true;
         };
         box.PreviewMouseLeftButtonUp += (_, e) =>
@@ -1549,6 +1585,8 @@ internal sealed class SettingsWindow : Window
             OverlayDisplayMode.Auto => localizer["Auto"],
             OverlayDisplayMode.Compact => localizer["Compact"],
             OverlayDisplayMode.Expanded => localizer["Expanded"],
+            OverlayOrientation.Horizontal => localizer["Horizontal"],
+            OverlayOrientation.Vertical => localizer["Vertical"],
             _ => value.ToString(),
         };
     }

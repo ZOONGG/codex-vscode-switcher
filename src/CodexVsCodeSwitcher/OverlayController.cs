@@ -24,6 +24,7 @@ internal sealed class OverlayController : IDisposable
     private readonly IStartupRegistrationService startupRegistrationService;
     private readonly SafeLogger logger;
     private readonly MinimalBackupService backupMaintenance;
+    private readonly VsCodeSetupImportService setupImportService;
     private readonly ProfileStatusService statusService;
     private readonly DispatcherTimer windowTrackingTimer;
     private readonly CancellationTokenSource disposalTokenSource = new();
@@ -59,7 +60,8 @@ internal sealed class OverlayController : IDisposable
         VsCodeLaunchPlanBuilder launchPlanBuilder,
         IStartupRegistrationService startupRegistrationService,
         SafeLogger logger,
-        MinimalBackupService backupMaintenance)
+        MinimalBackupService backupMaintenance,
+        VsCodeSetupImportService setupImportService)
     {
         this.paths = paths;
         this.protectedPaths = protectedPaths;
@@ -75,6 +77,7 @@ internal sealed class OverlayController : IDisposable
         this.startupRegistrationService = startupRegistrationService;
         this.logger = logger;
         this.backupMaintenance = backupMaintenance;
+        this.setupImportService = setupImportService;
         settings = settingsService.Load();
         localizer = new Localizer(settings.Language);
         App.ApplyTheme(settings.Theme);
@@ -133,6 +136,9 @@ internal sealed class OverlayController : IDisposable
 
     public void RevealFromSecondInstance()
         => Application.Current.Dispatcher.Invoke(ShowOverlay);
+
+    public void LaunchLastProfileOrChoose()
+        => Application.Current.Dispatcher.BeginInvoke(LaunchManagedVsCode);
 
     private void EnsureOverlay()
     {
@@ -494,6 +500,8 @@ internal sealed class OverlayController : IDisposable
             ClearWorkspaceForNextLaunch,
             GetIntegrationSnapshot,
             () => OpenFolder(settings.DedicatedVsCodeUserDataDirectory),
+            () => _ = ImportVsCodeSetupAsync(),
+            CreateCodexVsCodeShortcut,
             CopyLastDiagnostics,
             ResetManagedRuntimeState,
             () => Application.Current.Shutdown());
@@ -861,6 +869,122 @@ internal sealed class OverlayController : IDisposable
                 "VsCodeExecutableMissingWithPath",
                 settings.CustomVsCodeExecutablePath)
             : fallback;
+
+    private async Task ImportVsCodeSetupAsync()
+    {
+        string? executable = executableLocator.Locate(settings.CustomVsCodeExecutablePath);
+        if (executable is null)
+        {
+            ShowIntegrationError("VsCodeExecutableMissing");
+            return;
+        }
+
+        try
+        {
+            string ordinaryUser = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Code",
+                "User");
+            string ordinaryExtensions = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".vscode",
+                "extensions");
+            VsCodeSetupImportPlan plan = setupImportService.BuildPlan(
+                ordinaryUser,
+                ordinaryExtensions);
+            if (plan.Files.Count == 0 && plan.ExtensionIds.Count == 0)
+            {
+                ShowIntegrationNotice("ImportVsCodeSetupNothingFound");
+                return;
+            }
+
+            string files = plan.Files.Count == 0
+                ? localizer["None"]
+                : string.Join(
+                    Environment.NewLine,
+                    plan.Files.Select(file =>
+                        $"• {file.DestinationRelativePath} ({file.Length / 1024d:0.#} KB)"));
+            string preview = localizer.Format(
+                "ImportVsCodeSetupPreview",
+                files,
+                plan.ExtensionIds.Count);
+            bool approved = ConfirmDialog.Show(
+                settingsWindow,
+                IntPtr.Zero,
+                localizer["ImportVsCodeSetup"],
+                preview,
+                localizer["Import"],
+                localizer["Cancel"]);
+            if (!approved)
+            {
+                return;
+            }
+
+            VsCodeSetupImportResult result = await setupImportService.ImportAsync(
+                plan,
+                executable,
+                settings.DedicatedVsCodeUserDataDirectory,
+                settings.DedicatedVsCodeExtensionsDirectory,
+                plan.ExtensionIds,
+                disposalTokenSource.Token).ConfigureAwait(true);
+            extensionManager.ConfigureDedicatedSettings(
+                settings.DedicatedVsCodeUserDataDirectory,
+                settings.LaunchCodexSidebarOnStartup);
+            string summary = localizer.Format(
+                "ImportVsCodeSetupComplete",
+                result.CopiedFiles.Count,
+                result.InstalledExtensionIds.Count);
+            if (result.ExtensionFailures.Count == 0)
+            {
+                overlayWindow?.ShowNotification(summary);
+            }
+            else
+            {
+                string failures = string.Join(
+                    Environment.NewLine,
+                    result.ExtensionFailures.Select(failure =>
+                        $"• {failure.ExtensionId}: {failure.Reason}"));
+                overlayWindow?.ShowError(localizer.Format(
+                    "ImportVsCodeSetupPartialFailure",
+                    summary,
+                    failures));
+            }
+
+            settingsWindow?.RefreshIntegrationPage();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException)
+        {
+            logger.Error("Safe VS Code setup import failed.", exception);
+            ShowIntegrationError("ImportVsCodeSetupFailed");
+        }
+    }
+
+    private void CreateCodexVsCodeShortcut()
+    {
+        try
+        {
+            string executable = Environment.ProcessPath
+                ?? throw new InvalidOperationException("The current executable path is unavailable.");
+            _ = new WindowsShortcutService().CreateCodexVsCodeShortcut(executable);
+            ShowIntegrationNotice("CodexVsCodeShortcutCreated");
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException
+                or System.Runtime.InteropServices.COMException)
+        {
+            logger.Error("Could not create the Codex VS Code shortcut.", exception);
+            ShowIntegrationError("CodexVsCodeShortcutFailed");
+        }
+    }
 
     private void CopyLastDiagnostics()
     {

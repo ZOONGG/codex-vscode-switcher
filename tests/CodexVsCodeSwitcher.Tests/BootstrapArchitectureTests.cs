@@ -95,6 +95,24 @@ public sealed class BootstrapArchitectureTests
     }
 
     [Fact]
+    public void CodexVsCodeShortcut_UsesExplicitLaunchWorkflow()
+    {
+        string app = ReadRepositoryFile(
+            "src",
+            "CodexVsCodeSwitcher",
+            "App.xaml.cs");
+        string shortcut = ReadRepositoryFile(
+            "src",
+            "CodexVsCodeSwitcher",
+            "WindowsShortcutService.cs");
+
+        Assert.Contains("--launch", app, StringComparison.Ordinal);
+        Assert.Contains("LaunchLastProfileOrChoose", app, StringComparison.Ordinal);
+        Assert.Contains("Codex VS Code.lnk", shortcut, StringComparison.Ordinal);
+        Assert.Contains("SetArguments(\"--launch\")", shortcut, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Runtime_DoesNotQueryOrControlChatGptDesktop()
     {
         string root = FindRepositoryRoot();

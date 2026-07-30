@@ -123,6 +123,10 @@ public partial class App : Application
                 launchPlanBuilder,
                 processRunner,
                 protectedPaths);
+            var setupImportService = new VsCodeSetupImportService(
+                protectedPaths,
+                processRunner,
+                launchPlanBuilder);
             backupMaintenance.CleanupRetention();
             controller = new OverlayController(
                 paths,
@@ -138,8 +142,15 @@ public partial class App : Application
                 launchPlanBuilder,
                 new StartupRegistrationService(),
                 logger,
-                backupMaintenance);
+                backupMaintenance,
+                setupImportService);
             controller.Start();
+            if (e.Args.Any(argument =>
+                argument.Equals("--launch", StringComparison.OrdinalIgnoreCase)))
+            {
+                controller.LaunchLastProfileOrChoose();
+            }
+
             StartActivationListener();
             logger.Info("Overlay started.");
         }
