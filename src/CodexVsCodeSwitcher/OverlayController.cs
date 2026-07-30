@@ -28,6 +28,7 @@ internal sealed class OverlayController : IDisposable
     private readonly DispatcherTimer windowTrackingTimer;
     private readonly CancellationTokenSource disposalTokenSource = new();
     private readonly SemaphoreSlim launchWorkflowLock = new(1, 1);
+    private readonly OverlayVisibilityLeaseManager visibilityLeases = new();
     private OverlaySettings settings;
     private Localizer localizer;
     private TrayIconService? trayIcon;
@@ -41,6 +42,7 @@ internal sealed class OverlayController : IDisposable
     private bool overlayRequestedVisible;
     private ManagedVsCodeObservation? managedObservation;
     private CodexExtensionStatus? lastExtensionActionStatus;
+    private IDisposable? settingsPreviewLease;
 
     public OverlayController(
         CodexVsCodeStorageLayout paths,
@@ -99,6 +101,7 @@ internal sealed class OverlayController : IDisposable
             OverlayHandle = overlayWindow!.Handle,
             ShowOnlyWithManagedVsCode = settings.ShowOverlayOnlyWithManagedVsCode,
             ManualVisibilityRequested = overlayRequestedVisible,
+            ExplicitVisibilityReasons = visibilityLeases.ActiveReasons,
         };
         managedWindowTracker.StateChanged += OnManagedWindowStateChanged;
         managedWindowTracker.Start();
@@ -114,6 +117,8 @@ internal sealed class OverlayController : IDisposable
     public void Dispose()
     {
         disposalTokenSource.Cancel();
+        settingsPreviewLease?.Dispose();
+        settingsPreviewLease = null;
         windowTrackingTimer.Stop();
         managedWindowTracker?.Dispose();
         statusService.Dispose();
@@ -196,6 +201,9 @@ internal sealed class OverlayController : IDisposable
         ProfileInfo? selected = profiles.FirstOrDefault(
             item => item.Name.Equals(profile, StringComparison.OrdinalIgnoreCase));
         string displayName = selected?.DisplayName ?? profile;
+        IDisposable switchingVisibility =
+            visibilityLeases.Acquire(OverlayVisibilityReason.ProfileSwitchingStatus);
+        ReconcileOverlayVisibility();
         overlayWindow?.SetSwitching(true, displayName);
         try
         {
@@ -251,6 +259,8 @@ internal sealed class OverlayController : IDisposable
         {
             overlayWindow?.SetSwitching(false, null);
             launchWorkflowLock.Release();
+            switchingVisibility.Dispose();
+            ReconcileOverlayVisibility();
         }
     }
 
@@ -419,6 +429,9 @@ internal sealed class OverlayController : IDisposable
             return;
         }
 
+        settingsPreviewLease?.Dispose();
+        settingsPreviewLease = visibilityLeases.Acquire(OverlayVisibilityReason.SettingsPreview);
+        ReconcileOverlayVisibility();
         settingsWindow = new SettingsWindow(
             settings,
             profiles,
@@ -448,7 +461,13 @@ internal sealed class OverlayController : IDisposable
             GetIntegrationSnapshot,
             () => OpenFolder(settings.DedicatedVsCodeUserDataDirectory),
             () => Application.Current.Shutdown());
-        settingsWindow.Closed += (_, _) => settingsWindow = null;
+        settingsWindow.Closed += (_, _) =>
+        {
+            settingsWindow = null;
+            settingsPreviewLease?.Dispose();
+            settingsPreviewLease = null;
+            ReconcileOverlayVisibility();
+        };
         settingsWindow.Show();
         BringToFront(settingsWindow);
         settingsWindow.SetConflicts(RegisterHotkeys());
@@ -592,6 +611,7 @@ internal sealed class OverlayController : IDisposable
         {
             managedWindowTracker.ShowOnlyWithManagedVsCode = settings.ShowOverlayOnlyWithManagedVsCode;
             managedWindowTracker.ManualVisibilityRequested = overlayRequestedVisible;
+            managedWindowTracker.ExplicitVisibilityReasons = visibilityLeases.ActiveReasons;
             managedWindowTracker.Reconcile();
         }
         settingsWindow?.RefreshTheme();
@@ -655,7 +675,14 @@ internal sealed class OverlayController : IDisposable
         settings.PositionPreset = PositionPreset.Custom;
         overlayWindow!.ResetFloatingPosition();
         SaveSettings(settings);
-        ShowOverlay();
+        if (settingsPreviewLease is not null)
+        {
+            ReconcileOverlayVisibility();
+        }
+        else
+        {
+            ShowOverlay();
+        }
     }
 
     private void ResetSettings()
@@ -673,11 +700,20 @@ internal sealed class OverlayController : IDisposable
         managedObservation = observation;
         overlayWindow?.SetManagedVsCodeRunning(observation is not null);
         ManagedVsCodeWindow? managedWindow = observation?.Window;
-        if (!shouldShow || managedWindow is null)
+        if (!shouldShow)
         {
             attachedVsCodeWindow = IntPtr.Zero;
             overlayWindow!.Hide();
             trayIcon?.UpdateOverlayState(false);
+            return;
+        }
+
+        if (managedWindow is null)
+        {
+            attachedVsCodeWindow = IntPtr.Zero;
+            overlayWindow!.Detach();
+            overlayWindow.ShowFloating();
+            trayIcon?.UpdateOverlayState(overlayWindow.IsVisible);
             return;
         }
 
@@ -699,6 +735,24 @@ internal sealed class OverlayController : IDisposable
         }
 
         trayIcon?.UpdateOverlayState(overlayWindow.IsVisible);
+    }
+
+    private void ReconcileOverlayVisibility()
+    {
+        if (managedWindowTracker is null)
+        {
+            if ((visibilityLeases.ActiveReasons
+                & (OverlayVisibilityReason.SettingsPreview
+                    | OverlayVisibilityReason.ProfileSwitchingStatus)) != 0)
+            {
+                overlayWindow?.ShowFloating();
+            }
+
+            return;
+        }
+
+        managedWindowTracker.ExplicitVisibilityReasons = visibilityLeases.ActiveReasons;
+        managedWindowTracker.Reconcile();
     }
 
     private ManagedVsCodeObservation? ObserveManagedInstanceSafely()

@@ -30,6 +30,8 @@ internal sealed class ManagedVsCodeWindowTracker : IDisposable
 
     public bool ManualVisibilityRequested { get; set; } = true;
 
+    public OverlayVisibilityReason ExplicitVisibilityReasons { get; set; }
+
     public void Start()
     {
         RegisterHook(NativeMethods.EventSystemForeground);
@@ -58,12 +60,22 @@ internal sealed class ManagedVsCodeWindowTracker : IDisposable
         bool overlayForeground = foreground != IntPtr.Zero
             && OverlayHandle != IntPtr.Zero
             && (foreground == OverlayHandle || IsOwnedBy(foreground, OverlayHandle));
+        OverlayVisibilityReason reasons = ExplicitVisibilityReasons;
+        if (managedForeground)
+        {
+            reasons |= OverlayVisibilityReason.ManagedVsCodeForeground;
+        }
+
+        if (overlayForeground)
+        {
+            reasons |= OverlayVisibilityReason.OverlayInteraction;
+        }
+
         bool shouldShow = visibilityPolicy.ShouldShow(new ManagedOverlayVisibilityInput(
             managedWindow is not null && NativeMethods.IsWindow(managedWindow.Handle),
             managedWindow?.IsVisible == true,
             managedWindow?.IsMinimized == true,
-            managedForeground,
-            overlayForeground,
+            reasons,
             NativeMethods.IsInputDesktopAvailable(),
             ShowOnlyWithManagedVsCode,
             ManualVisibilityRequested));

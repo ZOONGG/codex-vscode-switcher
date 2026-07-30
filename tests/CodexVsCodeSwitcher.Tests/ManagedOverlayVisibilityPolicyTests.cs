@@ -8,11 +8,13 @@ public sealed class ManagedOverlayVisibilityPolicyTests
 
     [Fact]
     public void ShowsForManagedForegroundWindow()
-        => Assert.True(policy.ShouldShow(Input(managedForeground: true)));
+        => Assert.True(policy.ShouldShow(Input(
+            reasons: OverlayVisibilityReason.ManagedVsCodeForeground)));
 
     [Fact]
     public void RemainsVisibleWhileOverlayIsForeground()
-        => Assert.True(policy.ShouldShow(Input(overlayForeground: true)));
+        => Assert.True(policy.ShouldShow(Input(
+            reasons: OverlayVisibilityReason.OverlayInteraction)));
 
     [Fact]
     public void HidesForChatGptBrowserExplorerAndUnmanagedVsCodeForeground()
@@ -20,13 +22,19 @@ public sealed class ManagedOverlayVisibilityPolicyTests
 
     [Fact]
     public void HidesWhenManagedWindowIsMinimized()
-        => Assert.False(policy.ShouldShow(Input(managedForeground: true, minimized: true)));
+        => Assert.False(policy.ShouldShow(Input(
+            reasons: OverlayVisibilityReason.ManagedVsCodeForeground,
+            minimized: true)));
 
     [Fact]
     public void RestoresAfterManagedWindowIsRestoredAndFocused()
     {
-        Assert.False(policy.ShouldShow(Input(managedForeground: true, minimized: true)));
-        Assert.True(policy.ShouldShow(Input(managedForeground: true, minimized: false)));
+        Assert.False(policy.ShouldShow(Input(
+            reasons: OverlayVisibilityReason.ManagedVsCodeForeground,
+            minimized: true)));
+        Assert.True(policy.ShouldShow(Input(
+            reasons: OverlayVisibilityReason.ManagedVsCodeForeground,
+            minimized: false)));
     }
 
     [Fact]
@@ -35,7 +43,9 @@ public sealed class ManagedOverlayVisibilityPolicyTests
 
     [Fact]
     public void HidesOnLockOrSecureDesktop()
-        => Assert.False(policy.ShouldShow(Input(managedForeground: true, inputDesktop: false)));
+        => Assert.False(policy.ShouldShow(Input(
+            reasons: OverlayVisibilityReason.SettingsPreview,
+            inputDesktop: false)));
 
     [Fact]
     public void ManualFloatingModeCanBeShownWithoutManagedWindow()
@@ -46,13 +56,36 @@ public sealed class ManagedOverlayVisibilityPolicyTests
     [Fact]
     public void ManualHideWinsOverForegroundState()
         => Assert.False(policy.ShouldShow(Input(
-            managedForeground: true,
+            reasons: OverlayVisibilityReason.ManagedVsCodeForeground,
             manualRequested: false)));
+
+    [Fact]
+    public void SettingsPreviewShowsWithoutManagedWindow()
+        => Assert.True(policy.ShouldShow(Input(
+            hasWindow: false,
+            reasons: OverlayVisibilityReason.SettingsPreview,
+            manualRequested: false)));
+
+    [Fact]
+    public void ClosingSettingsPreviewRestoresManagedOnlyVisibility()
+    {
+        Assert.True(policy.ShouldShow(Input(
+            hasWindow: false,
+            reasons: OverlayVisibilityReason.SettingsPreview)));
+        Assert.False(policy.ShouldShow(Input(
+            hasWindow: false,
+            reasons: OverlayVisibilityReason.None)));
+    }
+
+    [Fact]
+    public void ProfileSwitchingStatusShowsDuringManagedWindowRestart()
+        => Assert.True(policy.ShouldShow(Input(
+            hasWindow: false,
+            reasons: OverlayVisibilityReason.ProfileSwitchingStatus)));
 
     private static ManagedOverlayVisibilityInput Input(
         bool hasWindow = true,
-        bool managedForeground = false,
-        bool overlayForeground = false,
+        OverlayVisibilityReason reasons = OverlayVisibilityReason.None,
         bool minimized = false,
         bool inputDesktop = true,
         bool showOnlyManaged = true,
@@ -61,8 +94,7 @@ public sealed class ManagedOverlayVisibilityPolicyTests
             hasWindow,
             ManagedWindowVisible: hasWindow,
             ManagedWindowMinimized: minimized,
-            ManagedWindowIsForeground: managedForeground,
-            OverlayInteractionIsForeground: overlayForeground,
+            VisibilityReasons: reasons,
             InputDesktopAvailable: inputDesktop,
             ShowOnlyWithManagedVsCode: showOnlyManaged,
             ManualVisibilityRequested: manualRequested);
