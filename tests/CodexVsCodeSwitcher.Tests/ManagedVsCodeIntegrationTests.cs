@@ -200,6 +200,41 @@ public sealed class ManagedVsCodeIntegrationTests
     }
 
     [Fact]
+    public void ManagedIdentity_AcceptsExistingExactMatchingManagedProcess()
+    {
+        using var temp = new TempDirectory();
+        ManagedVsCodeInstanceState state = State(temp.Path, processId: 42);
+        var evidence = new ProcessIdentityEvidence(
+            84,
+            state.LaunchTimestampUtc.AddHours(-2),
+            state.ExecutablePath,
+            [
+                state.ExecutablePath,
+                "--user-data-dir",
+                state.UserDataDirectory,
+                "--extensions-dir",
+                state.ExtensionsDirectory,
+                "--new-window",
+            ]);
+
+        Assert.True(new ManagedProcessIdentityPolicy().IsExactManagedProcessCandidate(state, evidence));
+    }
+
+    [Fact]
+    public void ManagedIdentity_RejectsOrdinaryVsCodeAsExistingCandidate()
+    {
+        using var temp = new TempDirectory();
+        ManagedVsCodeInstanceState state = State(temp.Path, processId: 42);
+        var evidence = new ProcessIdentityEvidence(
+            84,
+            DateTimeOffset.UtcNow,
+            state.ExecutablePath,
+            [state.ExecutablePath, "--new-window"]);
+
+        Assert.False(new ManagedProcessIdentityPolicy().IsExactManagedProcessCandidate(state, evidence));
+    }
+
+    [Fact]
     public async Task Activation_DoesNotCopyProfileOrAuthenticationFile()
     {
         using var context = new ActivationContext();
@@ -322,6 +357,35 @@ public sealed class ManagedVsCodeIntegrationTests
         Assert.Equal(ProfileActivationStatus.WindowNotFound, failure.Status);
         Assert.Equal(ProfileActivationStatus.Succeeded, retry.Status);
         Assert.Equal("alpha", context.Layout.ActiveProfileStore.Read());
+    }
+
+    [Fact]
+    public async Task ProcessExit_IsReportedWithStructuredFailureAndAllowsRetry()
+    {
+        using var context = new ActivationContext();
+        context.Runtime.NextWaitStatus = ManagedWindowWaitStatus.ProcessExited;
+
+        ProfileActivationResult failure = await context.ActivateAsync("alpha");
+        ProfileActivationResult retry = await context.ActivateAsync("alpha");
+
+        Assert.Equal(ProfileActivationStatus.LaunchFailed, failure.Status);
+        Assert.Equal(ActivationFailureCategory.ProcessExitedImmediately, failure.FailureCategory);
+        Assert.Equal("process-start", failure.TimeoutStage);
+        Assert.Equal(ProfileActivationStatus.Succeeded, retry.Status);
+    }
+
+    [Fact]
+    public void ObserveCurrent_DiscardsClearlyStaleRuntimeMetadata()
+    {
+        using var context = new ActivationContext();
+        context.ConfigurePreviousManagedProfile("beta");
+        context.Runtime.Current = null;
+
+        ManagedVsCodeObservation? observation = context.Service.ObserveCurrent();
+
+        Assert.Null(observation);
+        Assert.Null(context.InstanceStore.Read());
+        Assert.Equal("beta", context.Layout.ActiveProfileStore.Read());
     }
 
     [Fact]
@@ -668,6 +732,7 @@ public sealed class ManagedVsCodeIntegrationTests
         public HashSet<int> ForceCloseTargets { get; } = [];
         public int OrdinaryProcessId { get; set; } = 9999;
         public bool KeepLaunchedProcessAliveWhenWindowMissing { get; set; }
+        public ManagedWindowWaitStatus? NextWaitStatus { get; set; }
 
         public ManagedVsCodeObservation? Observe(ManagedVsCodeInstanceState state)
             => Current?.State.RootProcessId == state.RootProcessId ? Current : null;
@@ -699,13 +764,18 @@ public sealed class ManagedVsCodeIntegrationTests
             return new ManagedProcessIdentity(nextProcessId++, DateTimeOffset.UtcNow);
         }
 
-        public async Task<ManagedVsCodeObservation?> WaitForWindowAsync(
+        public async Task<ManagedWindowWaitResult> WaitForWindowAsync(
             ManagedVsCodeInstanceState state,
             TimeSpan timeout,
             CancellationToken cancellationToken)
         {
             ManagedVsCodeObservation? result;
-            if (WaitHandler is not null)
+            if (NextWaitStatus is not null
+                && NextWaitStatus != ManagedWindowWaitStatus.WindowFound)
+            {
+                result = null;
+            }
+            else if (WaitHandler is not null)
             {
                 result = await WaitHandler(state, cancellationToken);
             }
@@ -724,7 +794,17 @@ public sealed class ManagedVsCodeIntegrationTests
                     new HashSet<int> { state.RootProcessId },
                     Window: null)
                 : null);
-            return result;
+            ManagedWindowWaitStatus status = NextWaitStatus
+                ?? (result is not null
+                    ? ManagedWindowWaitStatus.WindowFound
+                    : Current is not null
+                        ? ManagedWindowWaitStatus.MatchingProcessWithoutWindow
+                        : ManagedWindowWaitStatus.WindowDetectionTimeout);
+            NextWaitStatus = null;
+            return new ManagedWindowWaitResult(
+                status,
+                Current,
+                TimeSpan.FromMilliseconds(1));
         }
 
         public void ForceClose(ManagedVsCodeObservation instance)

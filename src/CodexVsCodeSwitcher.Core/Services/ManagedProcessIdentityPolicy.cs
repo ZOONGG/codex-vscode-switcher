@@ -51,6 +51,24 @@ public sealed class ManagedProcessIdentityPolicy
                 expected.ExtensionsDirectory);
     }
 
+    public bool IsExactManagedProcessCandidate(
+        ManagedVsCodeInstanceState expected,
+        ProcessIdentityEvidence evidence)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        ArgumentNullException.ThrowIfNull(evidence);
+        return evidence.ProcessId > 0
+            && SamePath(evidence.ExecutablePath, expected.ExecutablePath)
+            && HasArgumentValue(
+                evidence.CommandLineArguments,
+                "--user-data-dir",
+                expected.UserDataDirectory)
+            && HasArgumentValue(
+                evidence.CommandLineArguments,
+                "--extensions-dir",
+                expected.ExtensionsDirectory);
+    }
+
     private static bool HasArgumentValue(
         IReadOnlyList<string> arguments,
         string option,

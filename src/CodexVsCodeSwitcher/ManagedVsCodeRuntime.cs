@@ -11,7 +11,9 @@ internal sealed class ManagedVsCodeRuntime : IManagedVsCodeRuntime
     private readonly ManagedProcessIdentityPolicy identityPolicy = new();
 
     public ManagedVsCodeObservation? Observe(ManagedVsCodeInstanceState state)
-        => ObserveExact(state) ?? TryObserveTransferredRoot(state);
+        => ObserveExact(state)
+            ?? TryObserveTransferredRoot(state)
+            ?? TryObserveMatchingManagedProcess(state);
 
     private ManagedVsCodeObservation? ObserveExact(ManagedVsCodeInstanceState state)
     {
@@ -91,25 +93,49 @@ internal sealed class ManagedVsCodeRuntime : IManagedVsCodeRuntime
         }
     }
 
-    public async Task<ManagedVsCodeObservation?> WaitForWindowAsync(
+    public async Task<ManagedWindowWaitResult> WaitForWindowAsync(
         ManagedVsCodeInstanceState state,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
+        DateTimeOffset started = DateTimeOffset.UtcNow;
         DateTimeOffset deadline = DateTimeOffset.UtcNow + timeout;
+        bool sawMatchingProcess = false;
         while (DateTimeOffset.UtcNow < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ManagedVsCodeObservation? observation = Observe(state);
-            if (observation?.Window is { IsVisible: true })
+            if (observation is not null)
             {
-                return observation;
+                sawMatchingProcess = true;
+            }
+
+            if (observation?.Window is { IsVisible: true, IsMinimized: false } window)
+            {
+                _ = NativeMethods.SetForegroundWindow(window.Handle);
+                return new ManagedWindowWaitResult(
+                    ManagedWindowWaitStatus.WindowFound,
+                    observation,
+                    DateTimeOffset.UtcNow - started);
+            }
+
+            if (observation?.Window is { } hiddenOrMinimized
+                && DateTimeOffset.UtcNow - started >= TimeSpan.FromSeconds(3))
+            {
+                _ = NativeMethods.ShowWindowAsync(hiddenOrMinimized.Handle, NativeMethods.SwRestore);
+                _ = NativeMethods.SetForegroundWindow(hiddenOrMinimized.Handle);
             }
 
             await Task.Delay(250, cancellationToken).ConfigureAwait(false);
         }
 
-        return null;
+        ManagedVsCodeObservation? finalObservation = Observe(state);
+        ManagedWindowWaitStatus status = finalObservation is not null
+            ? ManagedWindowWaitStatus.MatchingProcessWithoutWindow
+            : sawMatchingProcess
+                ? ManagedWindowWaitStatus.WindowDetectionTimeout
+                : ManagedWindowWaitStatus.ProcessExited;
+        return new ManagedWindowWaitResult(status, finalObservation, DateTimeOffset.UtcNow - started);
     }
 
     public void ForceClose(ManagedVsCodeObservation instance)
@@ -215,6 +241,37 @@ internal sealed class ManagedVsCodeRuntime : IManagedVsCodeRuntime
             };
             ManagedVsCodeObservation? observation = ObserveExact(recovered);
             if (observation?.Window is not null)
+            {
+                return observation;
+            }
+
+            fallback ??= observation;
+        }
+
+        return fallback;
+    }
+
+    private ManagedVsCodeObservation? TryObserveMatchingManagedProcess(
+        ManagedVsCodeInstanceState state)
+    {
+        IReadOnlyDictionary<int, int> processes = SnapshotParentProcesses();
+        ManagedVsCodeObservation? fallback = null;
+        foreach (int processId in processes.Keys)
+        {
+            if (processId == state.RootProcessId
+                || !TryReadIdentityEvidence(processId, out ProcessIdentityEvidence evidence)
+                || !identityPolicy.IsExactManagedProcessCandidate(state, evidence))
+            {
+                continue;
+            }
+
+            ManagedVsCodeInstanceState recovered = state with
+            {
+                RootProcessId = evidence.ProcessId,
+                RootProcessStartTimeUtc = evidence.StartTimeUtc,
+            };
+            ManagedVsCodeObservation? observation = ObserveExact(recovered);
+            if (observation?.Window is { IsVisible: true })
             {
                 return observation;
             }
@@ -347,6 +404,7 @@ internal sealed class ManagedVsCodeRuntime : IManagedVsCodeRuntime
         IntPtr foreground = NativeMethods.GetForegroundWindow();
         return FindWindows(processIds)
             .OrderByDescending(window => window.Handle == foreground)
+            .ThenByDescending(static window => window.IsVisible)
             .ThenByDescending(static window =>
             {
                 _ = NativeMethods.GetWindowRect(window.Handle, out NativeRect bounds);
@@ -397,7 +455,8 @@ internal sealed class ManagedVsCodeRuntime : IManagedVsCodeRuntime
         }, IntPtr.Zero);
 
         return windows
-            .Where(static item => item.Window.IsVisible)
+            .OrderByDescending(static item => item.Window.IsVisible)
+            .ThenByDescending(static item => item.Area)
             .Select(static item => item.Window)
             .ToArray();
     }

@@ -42,6 +42,7 @@ internal sealed class OverlayController : IDisposable
     private bool overlayRequestedVisible;
     private ManagedVsCodeObservation? managedObservation;
     private CodexExtensionStatus? lastExtensionActionStatus;
+    private ActivationDiagnostic? lastActivationDiagnostic;
     private IDisposable? settingsPreviewLease;
 
     public OverlayController(
@@ -241,9 +242,14 @@ internal sealed class OverlayController : IDisposable
             }
             else
             {
+                lastActivationDiagnostic = CreateActivationDiagnostic(
+                    result,
+                    profile,
+                    workspace);
                 overlayWindow?.SetProfileActivationStatus(profile, result.MessageKey);
-                overlayWindow?.ShowError(message);
-                trayIcon?.ShowBalloon("Codex VS Code Switcher", message);
+                string failureMessage = BuildActivationFailureMessage(result, message);
+                overlayWindow?.ShowError(failureMessage);
+                trayIcon?.ShowBalloon("Codex VS Code Switcher", failureMessage);
                 logger.Info($"Managed VS Code activation for profile '{profile}' ended with {result.Status}.");
                 settingsWindow?.RefreshIntegrationPage();
             }
@@ -254,6 +260,20 @@ internal sealed class OverlayController : IDisposable
         catch (Exception exception)
         {
             logger.Error("Managed VS Code profile activation failed unexpectedly.", exception);
+            lastActivationDiagnostic = new ActivationDiagnostic(
+                ActivationFailureCategory.Unexpected,
+                DateTimeOffset.UtcNow,
+                GetAppVersion(),
+                executableLocator.Locate(settings.CustomVsCodeExecutablePath)
+                    ?? settings.CustomVsCodeExecutablePath,
+                settings.DedicatedVsCodeUserDataDirectory,
+                settings.DedicatedVsCodeExtensionsDirectory,
+                profile,
+                settings.LastOpenedWorkspace,
+                [],
+                "activation",
+                exception.GetType().Name,
+                DiagnosticTextSanitizer.Sanitize(exception.Message));
             ShowIntegrationError("VsCodeLaunchFailed");
         }
         finally
@@ -334,6 +354,19 @@ internal sealed class OverlayController : IDisposable
         }
         else
         {
+            lastActivationDiagnostic = new ActivationDiagnostic(
+                ActivationFailureCategory.ExtensionInstallationFailed,
+                DateTimeOffset.UtcNow,
+                GetAppVersion(),
+                executable,
+                settings.DedicatedVsCodeUserDataDirectory,
+                settings.DedicatedVsCodeExtensionsDirectory,
+                activeProfileStore.Read() ?? "none",
+                settings.LastOpenedWorkspace,
+                [],
+                "extension-installation",
+                null,
+                result.DetailKey);
             ShowIntegrationError(key);
         }
 
@@ -461,6 +494,8 @@ internal sealed class OverlayController : IDisposable
             ClearWorkspaceForNextLaunch,
             GetIntegrationSnapshot,
             () => OpenFolder(settings.DedicatedVsCodeUserDataDirectory),
+            CopyLastDiagnostics,
+            ResetManagedRuntimeState,
             () => Application.Current.Shutdown());
         settingsWindow.Closed += (_, _) =>
         {
@@ -798,6 +833,82 @@ internal sealed class OverlayController : IDisposable
             workspaceHistory,
             extensionManager,
             launchPlanBuilder);
+
+    private ActivationDiagnostic CreateActivationDiagnostic(
+        ProfileActivationResult result,
+        string profileId,
+        string? workspace)
+        => new(
+            result.FailureCategory,
+            DateTimeOffset.UtcNow,
+            GetAppVersion(),
+            executableLocator.Locate(settings.CustomVsCodeExecutablePath)
+                ?? settings.CustomVsCodeExecutablePath,
+            settings.DedicatedVsCodeUserDataDirectory,
+            settings.DedicatedVsCodeExtensionsDirectory,
+            profileId,
+            workspace,
+            result.Processes ?? [],
+            result.TimeoutStage,
+            result.ExceptionType,
+            result.SanitizedExceptionMessage);
+
+    private string BuildActivationFailureMessage(
+        ProfileActivationResult result,
+        string fallback)
+        => result.FailureCategory == ActivationFailureCategory.ExecutableNotFound
+            ? localizer.Format(
+                "VsCodeExecutableMissingWithPath",
+                settings.CustomVsCodeExecutablePath)
+            : fallback;
+
+    private void CopyLastDiagnostics()
+    {
+        if (lastActivationDiagnostic is null)
+        {
+            ShowIntegrationNotice("NoDiagnosticsAvailable");
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(ActivationDiagnosticsFormatter.Format(lastActivationDiagnostic));
+            ShowIntegrationNotice("DiagnosticsCopied");
+        }
+        catch (Exception exception) when (
+            exception is System.Runtime.InteropServices.ExternalException
+                or ThreadStateException)
+        {
+            logger.Error("Could not copy sanitized diagnostics.", exception);
+            ShowIntegrationError("DiagnosticsCopyFailed");
+        }
+    }
+
+    private void ResetManagedRuntimeState()
+    {
+        ManagedVsCodeInstanceState? state = managedInstanceStore.Read();
+        if (state is not null && managedRuntime.Observe(state) is not null)
+        {
+            ShowIntegrationError("RuntimeStateResetWhileRunning");
+            return;
+        }
+
+        new ManagedRuntimeStateResetService(managedInstanceStore).Reset();
+        managedObservation = null;
+        attachedVsCodeWindow = IntPtr.Zero;
+        overlayWindow?.SetManagedVsCodeRunning(false);
+        managedWindowTracker?.Reconcile();
+        settingsWindow?.RefreshIntegrationPage();
+        ShowIntegrationNotice("RuntimeStateReset");
+    }
+
+    private static string GetAppVersion()
+    {
+        string? path = Environment.ProcessPath;
+        return path is null
+            ? "unknown"
+            : FileVersionInfo.GetVersionInfo(path).ProductVersion ?? "unknown";
+    }
 
     private void SelectWorkspaceFolder()
     {

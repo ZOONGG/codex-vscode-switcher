@@ -1,10 +1,11 @@
+using System.ComponentModel;
 using CodexVsCodeSwitcher.Core.Models;
 
 namespace CodexVsCodeSwitcher.Core.Services;
 
 public sealed class ProfileActivationService
 {
-    private static readonly TimeSpan LaunchTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan LaunchTimeout = TimeSpan.FromSeconds(60);
     private static readonly SemaphoreSlim ApplicationSwitchLock = new(1, 1);
     private readonly string profileRoot;
     private readonly IProtectedPathPolicy protectedPaths;
@@ -127,18 +128,27 @@ public sealed class ProfileActivationService
         }
         catch (Exception exception) when (exception is ArgumentException or DirectoryNotFoundException or InvalidOperationException or UnauthorizedAccessException)
         {
-            return new ProfileActivationResult(ProfileActivationStatus.InvalidProfile, "ProfileInvalid");
+            return new ProfileActivationResult(
+                ProfileActivationStatus.InvalidProfile,
+                "ProfileInvalid",
+                FailureCategory: ActivationFailureCategory.ProfileInvalid);
         }
 
         if (selectedProfile.Status != ProfileValidationStatus.Valid)
         {
-            return new ProfileActivationResult(ProfileActivationStatus.InvalidProfile, "ProfileInvalid");
+            return new ProfileActivationResult(
+                ProfileActivationStatus.InvalidProfile,
+                "ProfileInvalid",
+                FailureCategory: ActivationFailureCategory.ProfileInvalid);
         }
 
         string? executable = executableLocator.Locate(configuredExecutablePath);
         if (executable is null)
         {
-            return new ProfileActivationResult(ProfileActivationStatus.ExecutableMissing, "VsCodeExecutableMissing");
+            return new ProfileActivationResult(
+                ProfileActivationStatus.ExecutableMissing,
+                "VsCodeExecutableMissing",
+                FailureCategory: ActivationFailureCategory.ExecutableNotFound);
         }
         try
         {
@@ -146,7 +156,10 @@ public sealed class ProfileActivationService
         }
         catch (UnauthorizedAccessException)
         {
-            return new ProfileActivationResult(ProfileActivationStatus.ExecutableMissing, "VsCodeExecutableMissing");
+            return new ProfileActivationResult(
+                ProfileActivationStatus.ExecutableMissing,
+                "VsCodeExecutableAccessDenied",
+                FailureCategory: ActivationFailureCategory.AccessDenied);
         }
 
         string userData;
@@ -159,10 +172,19 @@ public sealed class ProfileActivationService
             protectedPaths.AssertCanWrite(extensions);
             Directory.CreateDirectory(userData);
             Directory.CreateDirectory(extensions);
+            AssertDirectoryWritable(userData);
+            AssertDirectoryWritable(extensions);
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            return new ProfileActivationResult(ProfileActivationStatus.InvalidDedicatedPath, "DedicatedPathInvalid");
+            return new ProfileActivationResult(
+                ProfileActivationStatus.InvalidDedicatedPath,
+                "DedicatedPathInvalid",
+                FailureCategory: exception is UnauthorizedAccessException
+                    ? ActivationFailureCategory.AccessDenied
+                    : ActivationFailureCategory.DedicatedDataDirectoryUnavailable,
+                ExceptionType: exception.GetType().Name,
+                SanitizedExceptionMessage: DiagnosticTextSanitizer.Sanitize(exception.Message));
         }
 
         string? workspace;
@@ -176,18 +198,27 @@ public sealed class ProfileActivationService
         }
         catch (Exception exception) when (exception is ArgumentException or UnauthorizedAccessException or NotSupportedException)
         {
-            return new ProfileActivationResult(ProfileActivationStatus.WorkspaceMissing, "WorkspaceMissing");
+            return new ProfileActivationResult(
+                ProfileActivationStatus.WorkspaceMissing,
+                "WorkspaceMissing",
+                FailureCategory: ActivationFailureCategory.WorkspaceMissing);
         }
 
         if (workspace is not null && !WorkspaceExists(workspace))
         {
-            return new ProfileActivationResult(ProfileActivationStatus.WorkspaceMissing, "WorkspaceMissing");
+            return new ProfileActivationResult(
+                ProfileActivationStatus.WorkspaceMissing,
+                "WorkspaceMissing",
+                FailureCategory: ActivationFailureCategory.WorkspaceMissing);
         }
 
         CodexExtensionStatus extension = extensionManager.Detect(extensions);
         if (requireExtension && extension.State != CodexExtensionState.Installed)
         {
-            return new ProfileActivationResult(ProfileActivationStatus.ExtensionMissing, "CodexExtensionMissing");
+            return new ProfileActivationResult(
+                ProfileActivationStatus.ExtensionMissing,
+                "CodexExtensionMissing",
+                FailureCategory: ActivationFailureCategory.ExtensionMissing);
         }
 
         ManagedVsCodeInstanceState? previousState = instanceStore.Read();
@@ -216,7 +247,8 @@ public sealed class ProfileActivationService
                 return new ProfileActivationResult(
                     ProfileActivationStatus.ShutdownBlocked,
                     "VsCodeShutdownBlocked",
-                    previousActiveProfile);
+                    previousActiveProfile,
+                    FailureCategory: ActivationFailureCategory.PreviousVsCodeDidNotClose);
             }
         }
 
@@ -228,6 +260,7 @@ public sealed class ProfileActivationService
             extensions,
             workspace,
             openCodexOnStartup,
+            progress,
             cancellationToken).ConfigureAwait(false);
         if (launchResult.Status == ProfileActivationStatus.Succeeded
             || previousState is null
@@ -241,6 +274,7 @@ public sealed class ProfileActivationService
             previousState,
             previousActiveProfile,
             openCodexOnStartup,
+            progress,
             cancellationToken).ConfigureAwait(false);
         return rollback.Status == ProfileActivationStatus.Succeeded
             ? new ProfileActivationResult(
@@ -256,7 +290,8 @@ public sealed class ProfileActivationService
                 previousActiveProfile,
                 launchResult.MessageKey,
                 RollbackAttempted: true,
-                RollbackSucceeded: false);
+                RollbackSucceeded: false,
+                FailureCategory: ActivationFailureCategory.RollbackFailed);
     }
 
     private async Task<ProfileActivationResult> LaunchAndCommitAsync(
@@ -266,6 +301,7 @@ public sealed class ProfileActivationService
         string extensions,
         string? workspace,
         bool openCodexOnStartup,
+        IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
         try
@@ -289,10 +325,12 @@ public sealed class ProfileActivationService
                 0,
                 DateTimeOffset.UtcNow);
             instanceStore.Write(pendingState);
-            ManagedVsCodeObservation? observed = await runtime.WaitForWindowAsync(
+            progress?.Report("WaitingForVsCodeWindow");
+            ManagedWindowWaitResult waitResult = await runtime.WaitForWindowAsync(
                 pendingState,
                 LaunchTimeout,
                 cancellationToken).ConfigureAwait(false);
+            ManagedVsCodeObservation? observed = waitResult.Observation;
             if (observed?.Window is null)
             {
                 ManagedVsCodeObservation? failedInstance = runtime.Observe(pendingState);
@@ -307,12 +345,35 @@ public sealed class ProfileActivationService
                         return new ProfileActivationResult(
                             ProfileActivationStatus.WindowNotFound,
                             "ManagedWindowNotFoundProcessStillRunning",
-                            SafeToRollback: false);
+                            SafeToRollback: false,
+                            FailureCategory: ActivationFailureCategory.MatchingProcessFoundWithoutWindow,
+                            TimeoutStage: "window-detection",
+                            Processes: BuildProcessDiagnostics(failedInstance));
                     }
                 }
 
                 instanceStore.Clear();
-                return new ProfileActivationResult(ProfileActivationStatus.WindowNotFound, "ManagedWindowNotFound");
+                return waitResult.Status switch
+                {
+                    ManagedWindowWaitStatus.ProcessExited => new ProfileActivationResult(
+                        ProfileActivationStatus.LaunchFailed,
+                        "VsCodeProcessExitedImmediately",
+                        FailureCategory: ActivationFailureCategory.ProcessExitedImmediately,
+                        TimeoutStage: "process-start"),
+                    ManagedWindowWaitStatus.MatchingProcessWithoutWindow => new ProfileActivationResult(
+                        ProfileActivationStatus.WindowNotFound,
+                        "ManagedWindowNotFoundProcessStillRunning",
+                        SafeToRollback: false,
+                        FailureCategory: ActivationFailureCategory.MatchingProcessFoundWithoutWindow,
+                        TimeoutStage: "window-detection",
+                        Processes: BuildProcessDiagnostics(waitResult.Observation)),
+                    _ => new ProfileActivationResult(
+                        ProfileActivationStatus.WindowNotFound,
+                        "VsCodeWindowDetectionTimeout",
+                        FailureCategory: ActivationFailureCategory.WindowDetectionTimeout,
+                        TimeoutStage: "window-detection",
+                        Processes: BuildProcessDiagnostics(waitResult.Observation)),
+                };
             }
 
             ManagedVsCodeInstanceState committed = observed.State with
@@ -329,12 +390,33 @@ public sealed class ProfileActivationService
         }
         catch (OperationCanceledException)
         {
+            instanceStore.Clear();
             throw;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException
+                or ArgumentException
+                or Win32Exception)
         {
             instanceStore.Clear();
-            return new ProfileActivationResult(ProfileActivationStatus.LaunchFailed, "VsCodeLaunchFailed");
+            ActivationFailureCategory category = exception switch
+            {
+                UnauthorizedAccessException => ActivationFailureCategory.AccessDenied,
+                Win32Exception { NativeErrorCode: 5 } => ActivationFailureCategory.AccessDenied,
+                Win32Exception => ActivationFailureCategory.ExecutableCouldNotStart,
+                IOException => ActivationFailureCategory.DedicatedDataDirectoryUnavailable,
+                _ => ActivationFailureCategory.ExecutableCouldNotStart,
+            };
+            return new ProfileActivationResult(
+                ProfileActivationStatus.LaunchFailed,
+                category == ActivationFailureCategory.AccessDenied
+                    ? "VsCodeExecutableAccessDenied"
+                    : "VsCodeCouldNotStart",
+                FailureCategory: category,
+                ExceptionType: exception.GetType().Name,
+                SanitizedExceptionMessage: DiagnosticTextSanitizer.Sanitize(exception.Message));
         }
     }
 
@@ -342,6 +424,7 @@ public sealed class ProfileActivationService
         ManagedVsCodeInstanceState previousState,
         string previousProfileId,
         bool openCodexOnStartup,
+        IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
         ProfileStorageAudit previousProfile;
@@ -368,8 +451,20 @@ public sealed class ProfileActivationService
             previousState.ExtensionsDirectory,
             previousState.WorkspacePath,
             openCodexOnStartup,
+            progress,
             cancellationToken).ConfigureAwait(false);
     }
+
+    private static IReadOnlyList<ManagedProcessDiagnostic>? BuildProcessDiagnostics(
+        ManagedVsCodeObservation? observation)
+        => observation is null
+            ? null
+            :
+            [
+                new ManagedProcessDiagnostic(
+                    observation.State.RootProcessId,
+                    observation.State.RootProcessStartTimeUtc),
+            ];
 
     private static string? NormalizeWorkspace(string? workspacePath)
         => string.IsNullOrWhiteSpace(workspacePath)
@@ -380,4 +475,20 @@ public sealed class ProfileActivationService
         => Directory.Exists(workspacePath)
             || (File.Exists(workspacePath)
                 && Path.GetExtension(workspacePath).Equals(".code-workspace", StringComparison.OrdinalIgnoreCase));
+
+    private static void AssertDirectoryWritable(string directory)
+    {
+        string probe = Path.Combine(
+            directory,
+            $".codex-vscode-switcher-write-{Guid.NewGuid():N}.tmp");
+        using var stream = new FileStream(
+            probe,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 1,
+            FileOptions.DeleteOnClose);
+        stream.WriteByte(0);
+        stream.Flush(flushToDisk: true);
+    }
 }

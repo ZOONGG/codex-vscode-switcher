@@ -42,6 +42,8 @@ internal sealed class SettingsWindow : Window
     private readonly Action launchEmptyWorkspace;
     private readonly Func<VsCodeIntegrationSnapshot> getIntegrationSnapshot;
     private readonly Action openDedicatedVsCodeData;
+    private readonly Action copyDiagnostics;
+    private readonly Action resetManagedRuntimeState;
     private readonly Action exitApplication;
     private readonly Localizer localizer;
     private readonly Grid contentHost = new();
@@ -85,6 +87,8 @@ internal sealed class SettingsWindow : Window
         Action launchEmptyWorkspace,
         Func<VsCodeIntegrationSnapshot> getIntegrationSnapshot,
         Action openDedicatedVsCodeData,
+        Action copyDiagnostics,
+        Action resetManagedRuntimeState,
         Action exitApplication)
     {
         this.settings = settings;
@@ -114,6 +118,8 @@ internal sealed class SettingsWindow : Window
         this.launchEmptyWorkspace = launchEmptyWorkspace;
         this.getIntegrationSnapshot = getIntegrationSnapshot;
         this.openDedicatedVsCodeData = openDedicatedVsCodeData;
+        this.copyDiagnostics = copyDiagnostics;
+        this.resetManagedRuntimeState = resetManagedRuntimeState;
         this.exitApplication = exitApplication;
 
         Title = "Codex VS Code Switcher";
@@ -489,6 +495,12 @@ internal sealed class SettingsWindow : Window
             (localizer["InstallCodexExtension"], "M 12 3 L 12 16 M 7 11 L 12 16 L 17 11 M 5 20 L 19 20", installCodexExtension, false),
             (localizer["OpenDedicatedVsCodeData"], "M 3 7 L 9 7 L 11 9 L 21 9 L 21 19 L 3 19 Z", openDedicatedVsCodeData, false),
             (localizer["OpenProfileRoot"], "M 3 7 L 9 7 L 11 9 L 21 9 L 21 19 L 3 19 Z", openProfilesFolder, false))));
+        stack.Children.Add(Card(
+            SectionHeader(localizer["Diagnostics"], localizer["DiagnosticsHelp"]),
+            CommandGrid(
+                (localizer["OpenLogsFolder"], "M 3 7 L 9 7 L 11 9 L 21 9 L 21 19 L 3 19 Z", openLogsFolder, false),
+                (localizer["CopyDiagnostics"], "M 8 4 L 20 4 L 20 18 L 8 18 Z M 4 8 L 4 22 L 16 22", copyDiagnostics, false),
+                (localizer["ResetManagedRuntimeState"], "M 5 5 L 19 5 L 19 19 L 5 19 Z M 8 8 L 16 16 M 16 8 L 8 16", resetManagedRuntimeState, false))));
         return stack;
     }
 

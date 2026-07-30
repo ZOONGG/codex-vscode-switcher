@@ -14,6 +14,7 @@ internal static class NativeMethods
     public const uint SwpNoZOrder = 0x0004;
     public const uint SwpNoActivate = 0x0010;
     public const uint SwpShowWindow = 0x0040;
+    public const int SwRestore = 9;
     public const int DwmwaUseImmersiveDarkModeBefore20H1 = 19;
     public const int DwmwaUseImmersiveDarkMode = 20;
     public const int WmHotkey = 0x0312;
@@ -113,6 +114,10 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();

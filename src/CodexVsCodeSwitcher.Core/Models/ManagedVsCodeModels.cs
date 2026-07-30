@@ -38,6 +38,19 @@ public sealed record ManagedVsCodeObservation(
     IReadOnlySet<int> VerifiedProcessIds,
     ManagedVsCodeWindow? Window);
 
+public enum ManagedWindowWaitStatus
+{
+    WindowFound,
+    ProcessExited,
+    MatchingProcessWithoutWindow,
+    WindowDetectionTimeout,
+}
+
+public sealed record ManagedWindowWaitResult(
+    ManagedWindowWaitStatus Status,
+    ManagedVsCodeObservation? Observation,
+    TimeSpan Elapsed);
+
 public enum ManagedShutdownStatus
 {
     NotRunning,
@@ -67,6 +80,31 @@ public enum ProfileActivationStatus
     RollbackFailed,
 }
 
+public enum ActivationFailureCategory
+{
+    None,
+    ExecutableNotFound,
+    ExecutableCouldNotStart,
+    AccessDenied,
+    ProfileInvalid,
+    DedicatedDataDirectoryUnavailable,
+    ExtensionMissing,
+    ExtensionInstallationFailed,
+    ProcessExitedImmediately,
+    MatchingProcessFoundWithoutWindow,
+    WindowDetectionTimeout,
+    WorkspaceMissing,
+    PreviousVsCodeDidNotClose,
+    StaleManagedInstanceState,
+    RollbackFailed,
+    Canceled,
+    Unexpected,
+}
+
+public sealed record ManagedProcessDiagnostic(
+    int ProcessId,
+    DateTimeOffset StartTimeUtc);
+
 public sealed record ProfileActivationResult(
     ProfileActivationStatus Status,
     string MessageKey,
@@ -74,7 +112,12 @@ public sealed record ProfileActivationResult(
     string? FailureDetailKey = null,
     bool RollbackAttempted = false,
     bool RollbackSucceeded = false,
-    bool SafeToRollback = true);
+    bool SafeToRollback = true,
+    ActivationFailureCategory FailureCategory = ActivationFailureCategory.None,
+    string? TimeoutStage = null,
+    string? ExceptionType = null,
+    string? SanitizedExceptionMessage = null,
+    IReadOnlyList<ManagedProcessDiagnostic>? Processes = null);
 
 public enum CodexExtensionState
 {

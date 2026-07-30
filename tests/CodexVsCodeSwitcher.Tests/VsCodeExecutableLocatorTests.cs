@@ -57,4 +57,22 @@ public sealed class VsCodeExecutableLocatorTests
 
         Assert.Null(locator.Locate(Path.Combine(temp.Path, "missing.exe")));
     }
+
+    [Fact]
+    public void ExplicitCustomPathWithSpacesWinsOverAutomaticDiscovery()
+    {
+        using var temp = new TempDirectory();
+        string customDirectory = Path.Combine(temp.Path, "Program Files", "Microsoft VS Code");
+        Directory.CreateDirectory(customDirectory);
+        string custom = Path.Combine(customDirectory, "Code.exe");
+        File.WriteAllText(custom, "fake");
+        string automatic = Path.Combine(temp.Path, "Code.exe");
+        File.WriteAllText(automatic, "fake");
+        var locator = new VsCodeExecutableLocator("", "", "", temp.Path);
+
+        string? detected = locator.Locate(custom);
+
+        Assert.Equal(Path.GetFullPath(custom), detected);
+        Assert.NotEqual(automatic, detected);
+    }
 }

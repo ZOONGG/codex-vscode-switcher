@@ -18,7 +18,7 @@ public interface IManagedVsCodeRuntime
 
     ManagedProcessIdentity Launch(VsCodeProcessStartSpec startSpec);
 
-    Task<ManagedVsCodeObservation?> WaitForWindowAsync(
+    Task<ManagedWindowWaitResult> WaitForWindowAsync(
         ManagedVsCodeInstanceState state,
         TimeSpan timeout,
         CancellationToken cancellationToken);
