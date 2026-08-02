@@ -545,7 +545,7 @@ internal sealed class SettingsWindow : Window
             Margin = new Thickness(0, 0, 0, 8),
         };
         stack.Children.Add(Card(
-            SectionHeader(localizer["Workspace"], localizer["WorkspaceHelp"]),
+            SectionHeader(localizer["CurrentProject"], localizer["WorkspaceHelp"]),
             workspaceText,
             CommandGrid(
                 (localizer["SelectWorkspaceFolder"], "M 3 7 L 9 7 L 11 9 L 21 9 L 21 19 L 3 19 Z", selectWorkspaceFolder, false),
