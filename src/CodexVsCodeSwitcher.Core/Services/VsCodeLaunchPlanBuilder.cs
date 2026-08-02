@@ -15,7 +15,8 @@ public sealed class VsCodeLaunchPlanBuilder
         string? workspacePath,
         VsCodeExtensionMode extensionMode = VsCodeExtensionMode.Isolated,
         CustomCaEnvironmentVariable customCaVariable = CustomCaEnvironmentVariable.None,
-        string? customCaCertificatePath = null)
+        string? customCaCertificatePath = null,
+        ManagedCompanionLaunchOptions? companion = null)
     {
         string executable = RequireFullPath(executablePath, nameof(executablePath));
         string userData = RequireFullPath(userDataDirectory, nameof(userDataDirectory));
@@ -44,13 +45,33 @@ public sealed class VsCodeLaunchPlanBuilder
             arguments.Add(workspace);
         }
 
-        return new VsCodeProcessStartSpec(
-            executable,
-            arguments,
+        var environment = new Dictionary<string, string>(
             ManagedEnvironmentOverridesBuilder.Build(
                 codexHome,
                 customCaVariable,
-                customCaCertificatePath));
+                customCaCertificatePath),
+            StringComparer.OrdinalIgnoreCase);
+        if (companion is not null)
+        {
+            string extensionDirectory = RequireFullPath(
+                companion.ExtensionDirectory,
+                nameof(companion.ExtensionDirectory));
+            string bridgeDirectory = RequireFullPath(
+                companion.BridgeDirectory,
+                nameof(companion.BridgeDirectory));
+            arguments.Add("--extensionDevelopmentPath");
+            arguments.Add(extensionDirectory);
+            environment[CompanionBridgeService.BridgePathEnvironmentVariable] = bridgeDirectory;
+            environment[CompanionBridgeService.SessionEnvironmentVariable] = companion.SessionId;
+            environment[CompanionBridgeService.OpenCodexEnvironmentVariable] =
+                companion.OpenCodexAutomatically ? "1" : "0";
+            environment[CompanionBridgeService.UserDataEnvironmentVariable] = userData;
+        }
+
+        return new VsCodeProcessStartSpec(
+            executable,
+            arguments,
+            environment);
     }
 
     public VsCodeProcessStartSpec BuildExtensionInstall(

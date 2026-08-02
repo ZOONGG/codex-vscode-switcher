@@ -1,0 +1,37 @@
+{
+  "name": "codex-vscode-switcher-companion",
+  "displayName": "Codex VS Code Switcher Companion",
+  "description": "Keeps the dedicated Codex VS Code workspace and Codex entry points in sync with the local switcher.",
+  "version": "1.0.0",
+  "publisher": "ZOONGG",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "*"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codexVsCodeSwitcher.openCodex",
+        "title": "Open Codex",
+        "category": "Codex VS Code Switcher"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "codexVsCodeSwitcher.openCodex",
+        "key": "ctrl+alt+c",
+        "when": "isWindows || isLinux"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node --check extension.js && node --test companion.test.js"
+  }
+}

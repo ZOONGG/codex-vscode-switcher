@@ -73,7 +73,8 @@ public sealed class ProfileActivationService
         CustomCaEnvironmentVariable customCaVariable,
         string? customCaCertificatePath,
         IProgress<string>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ManagedCompanionLaunchOptions? companion = null)
     {
         if (!await ApplicationSwitchLock.WaitAsync(0, cancellationToken).ConfigureAwait(false))
         {
@@ -97,7 +98,8 @@ public sealed class ProfileActivationService
                 customCaVariable,
                 customCaCertificatePath,
                 progress,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                companion).ConfigureAwait(false);
         }
         finally
         {
@@ -131,7 +133,8 @@ public sealed class ProfileActivationService
         CustomCaEnvironmentVariable customCaVariable,
         string? customCaCertificatePath,
         IProgress<string>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ManagedCompanionLaunchOptions? companion)
     {
         ProfileStorageAudit selectedProfile;
         try
@@ -306,7 +309,8 @@ public sealed class ProfileActivationService
             customCaVariable,
             customCaCertificatePath,
             progress,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            companion).ConfigureAwait(false);
         if (launchResult.Status == ProfileActivationStatus.Succeeded
             || previousState is null
             || string.IsNullOrWhiteSpace(previousActiveProfile)
@@ -322,7 +326,8 @@ public sealed class ProfileActivationService
             customCaVariable,
             customCaCertificatePath,
             progress,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            companion).ConfigureAwait(false);
         return rollback.Status == ProfileActivationStatus.Succeeded
             ? new ProfileActivationResult(
                 ProfileActivationStatus.RolledBack,
@@ -353,7 +358,8 @@ public sealed class ProfileActivationService
         CustomCaEnvironmentVariable customCaVariable,
         string? customCaCertificatePath,
         IProgress<string>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ManagedCompanionLaunchOptions? companion)
     {
         try
         {
@@ -367,7 +373,8 @@ public sealed class ProfileActivationService
                 workspace,
                 extensionMode,
                 customCaVariable,
-                customCaCertificatePath);
+                customCaCertificatePath,
+                companion);
             ManagedProcessIdentity launched = runtime.Launch(plan);
             var pendingState = new ManagedVsCodeInstanceState(
                 launched.ProcessId,
@@ -440,6 +447,10 @@ public sealed class ProfileActivationService
             instanceStore.Write(committed);
             activeProfileStore.Write(profile.ProfileName);
             workspaceHistory.SaveLastWorkspace(workspace);
+            if (workspace is not null)
+            {
+                workspaceHistory.MarkLaunched(workspace, DateTimeOffset.UtcNow);
+            }
             return new ProfileActivationResult(
                 ProfileActivationStatus.Succeeded,
                 "ActiveInVsCode",
@@ -484,7 +495,8 @@ public sealed class ProfileActivationService
         CustomCaEnvironmentVariable customCaVariable,
         string? customCaCertificatePath,
         IProgress<string>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ManagedCompanionLaunchOptions? companion)
     {
         ProfileStorageAudit previousProfile;
         try
@@ -515,7 +527,8 @@ public sealed class ProfileActivationService
             customCaVariable,
             customCaCertificatePath,
             progress,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            companion).ConfigureAwait(false);
     }
 
     private static IReadOnlyList<ManagedProcessDiagnostic>? BuildProcessDiagnostics(

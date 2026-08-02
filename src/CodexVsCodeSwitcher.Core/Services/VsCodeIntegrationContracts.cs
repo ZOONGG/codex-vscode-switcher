@@ -31,6 +31,11 @@ public interface IWorkspaceHistoryService
 {
     string? ReadLastWorkspace();
     void SaveLastWorkspace(string? workspacePath);
+    WorkspaceHistorySnapshot ReadSnapshot();
+    void ObserveWorkspace(WorkspaceDescriptor workspace);
+    void MarkLaunched(string workspacePath, DateTimeOffset launchedAtUtc);
+    void RemoveRecent(string workspacePath);
+    void ClearRecent();
 }
 
 public sealed record VsCodeIntegrationStatus(bool IsPrepared, bool IsImplemented, string MessageKey)

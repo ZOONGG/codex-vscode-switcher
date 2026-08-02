@@ -127,6 +127,14 @@ public partial class App : Application
                 protectedPaths,
                 processRunner,
                 launchPlanBuilder);
+            var workspaceHistory = new WorkspaceHistoryService(
+                paths.LastWorkspaceMetadataFile,
+                protectedPaths);
+            var companionBridge = new CompanionBridgeService(
+                paths.BridgeDirectory,
+                Path.Combine(AppContext.BaseDirectory, "companion-extension"),
+                protectedPaths,
+                workspaceHistory);
             backupMaintenance.CleanupRetention();
             controller = new OverlayController(
                 paths,
@@ -137,7 +145,8 @@ public partial class App : Application
                 VsCodeExecutableLocator.FromEnvironment(),
                 new ManagedVsCodeRuntime(),
                 new ManagedInstanceStore(paths.ManagedInstanceMetadataFile, protectedPaths),
-                new WorkspaceHistoryService(paths.LastWorkspaceMetadataFile, protectedPaths),
+                workspaceHistory,
+                companionBridge,
                 extensionManager,
                 launchPlanBuilder,
                 new StartupRegistrationService(),

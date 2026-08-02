@@ -21,6 +21,7 @@ internal sealed class OverlayController : IDisposable
     private readonly IManagedVsCodeRuntime managedRuntime;
     private readonly IManagedInstanceStore managedInstanceStore;
     private readonly IWorkspaceHistoryService workspaceHistory;
+    private readonly CompanionBridgeService companionBridge;
     private readonly ICodexExtensionManager extensionManager;
     private readonly VsCodeLaunchPlanBuilder launchPlanBuilder;
     private readonly IStartupRegistrationService startupRegistrationService;
@@ -51,6 +52,8 @@ internal sealed class OverlayController : IDisposable
     private CodexExtensionStatus? lastExtensionActionStatus;
     private ActivationDiagnostic? lastActivationDiagnostic;
     private IDisposable? settingsPreviewLease;
+    private SidebarOpenStatus lastSidebarStatus;
+    private bool shortcutConflictReported;
 
     public OverlayController(
         CodexVsCodeStorageLayout paths,
@@ -62,6 +65,7 @@ internal sealed class OverlayController : IDisposable
         IManagedVsCodeRuntime managedRuntime,
         IManagedInstanceStore managedInstanceStore,
         IWorkspaceHistoryService workspaceHistory,
+        CompanionBridgeService companionBridge,
         ICodexExtensionManager extensionManager,
         VsCodeLaunchPlanBuilder launchPlanBuilder,
         IStartupRegistrationService startupRegistrationService,
@@ -78,6 +82,7 @@ internal sealed class OverlayController : IDisposable
         this.managedRuntime = managedRuntime;
         this.managedInstanceStore = managedInstanceStore;
         this.workspaceHistory = workspaceHistory;
+        this.companionBridge = companionBridge;
         this.extensionManager = extensionManager;
         this.launchPlanBuilder = launchPlanBuilder;
         this.startupRegistrationService = startupRegistrationService;
@@ -98,13 +103,18 @@ internal sealed class OverlayController : IDisposable
         {
             Interval = TimeSpan.FromSeconds(2),
         };
-        windowTrackingTimer.Tick += (_, _) => managedWindowTracker?.Reconcile();
+        windowTrackingTimer.Tick += (_, _) =>
+        {
+            managedWindowTracker?.Reconcile();
+            SynchronizeCompanionState();
+        };
     }
 
     public void Start()
     {
         EnsureOverlay();
         EnsureTray();
+        trayIcon?.UpdateProjects(workspaceHistory.ReadSnapshot());
         RefreshProfiles();
         ApplySettings();
         overlayRequestedVisible = settings.ShowOverlayOnStart;
@@ -120,6 +130,10 @@ internal sealed class OverlayController : IDisposable
         managedWindowTracker.StateChanged += OnManagedWindowStateChanged;
         managedWindowTracker.Start();
         windowTrackingTimer.Start();
+        if (ObserveManagedInstanceSafely() is not null && companionBridge.TryResumeSession())
+        {
+            SynchronizeCompanionState();
+        }
         if (settingsService.LastLoadWarningKey is string warningKey)
         {
             overlayWindow?.ShowError(localizer[warningKey]);
@@ -193,9 +207,12 @@ internal sealed class OverlayController : IDisposable
 
         trayIcon = new TrayIconService(localizer);
         trayIcon.ToggleOverlayRequested += ToggleOverlay;
-        trayIcon.OpenCodexRequested += LaunchManagedVsCode;
+        trayIcon.OpenCodexRequested += OpenCodexNow;
         trayIcon.SettingsRequested += ShowSettingsWindow;
         trayIcon.ProfileSelected += profile => _ = SwitchProfileAsync(profile, restartIfActive: false);
+        trayIcon.ProjectSelected += SelectRecentProject;
+        trayIcon.RemoveRecentProjectRequested += RemoveRecentProject;
+        trayIcon.ClearRecentProjectsRequested += ClearRecentProjects;
         trayIcon.LaunchManagedVsCodeRequested += LaunchManagedVsCode;
         trayIcon.RestartManagedVsCodeRequested += RestartManagedVsCode;
         trayIcon.InstallCodexExtensionRequested += () => _ = InstallCodexExtensionAsync();
@@ -229,9 +246,12 @@ internal sealed class OverlayController : IDisposable
                 return;
             }
 
+            SynchronizeCompanionState();
             string? workspace = settings.ReopenLastWorkspaceAfterSwitch
-                ? FirstNonEmpty(settings.LastOpenedWorkspace, workspaceHistory.ReadLastWorkspace())
+                ? FirstNonEmpty(workspaceHistory.ReadLastWorkspace(), settings.LastOpenedWorkspace)
                 : null;
+            ManagedCompanionLaunchOptions companion = companionBridge.BeginSession(
+                settings.LaunchCodexSidebarOnStartup);
             ProfileActivationResult result = await CreateActivationService()
                 .ActivateAsync(
                     profile,
@@ -249,7 +269,8 @@ internal sealed class OverlayController : IDisposable
                     customCaCertificatePath: settings.CustomCaCertificatePath,
                     progress: new Progress<string>(
                         key => overlayWindow?.SetSwitchingStatus(localizer[key])),
-                    cancellationToken: disposalTokenSource.Token)
+                    cancellationToken: disposalTokenSource.Token,
+                    companion: companion)
                 .ConfigureAwait(true);
             string message = localizer[result.MessageKey];
             if (result.Status is ProfileActivationStatus.Succeeded or ProfileActivationStatus.AlreadyActive)
@@ -259,6 +280,7 @@ internal sealed class OverlayController : IDisposable
                 RefreshProfiles();
                 managedWindowTracker?.Reconcile();
                 settingsWindow?.RefreshIntegrationPage();
+                SynchronizeCompanionState();
             }
             else
             {
@@ -331,6 +353,65 @@ internal sealed class OverlayController : IDisposable
             }
         }
 
+        string? rememberedProject = FirstNonEmpty(
+            workspaceHistory.ReadLastWorkspace(),
+            settings.LastOpenedWorkspace);
+        if (!string.IsNullOrWhiteSpace(rememberedProject)
+            && !Directory.Exists(rememberedProject)
+            && !(File.Exists(rememberedProject)
+                && Path.GetExtension(rememberedProject).Equals(
+                    ".code-workspace",
+                    StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!ResolveMissingProject(rememberedProject))
+            {
+                return;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(rememberedProject))
+        {
+            Window? owner = settingsWindow?.IsVisible == true ? settingsWindow : null;
+            IntPtr nativeOwner = owner is null && overlayWindow?.IsVisible == true
+                ? overlayWindow.Handle
+                : IntPtr.Zero;
+            string? legacyLast = string.IsNullOrWhiteSpace(settings.LastOpenedWorkspace)
+                ? null
+                : settings.LastOpenedWorkspace;
+            FirstLaunchProjectAction projectAction = FirstLaunchProjectDialog.Show(
+                owner,
+                nativeOwner,
+                legacyLast is not null,
+                localizer);
+            switch (projectAction)
+            {
+                case FirstLaunchProjectAction.LastProject when legacyLast is not null:
+                    workspaceHistory.SaveLastWorkspace(legacyLast);
+                    break;
+                case FirstLaunchProjectAction.ChooseFolder:
+                    SelectWorkspaceFolder();
+                    if (workspaceHistory.ReadLastWorkspace() is null)
+                    {
+                        return;
+                    }
+                    break;
+                case FirstLaunchProjectAction.ChooseWorkspaceFile:
+                    SelectWorkspaceFile();
+                    if (workspaceHistory.ReadLastWorkspace() is null)
+                    {
+                        return;
+                    }
+                    break;
+                case FirstLaunchProjectAction.OpenEmpty:
+                    workspaceHistory.SaveLastWorkspace(null);
+                    settings.LastOpenedWorkspace = string.Empty;
+                    SaveSettings(settings);
+                    break;
+                default:
+                    return;
+            }
+        }
+
         _ = SwitchProfileAsync(active, restartIfActive: false);
     }
 
@@ -344,6 +425,78 @@ internal sealed class OverlayController : IDisposable
         }
 
         _ = SwitchProfileAsync(active, restartIfActive: true);
+    }
+
+    private void OpenCodexNow()
+    {
+        ManagedVsCodeInstanceState? state = managedInstanceStore.Read();
+        if (state is null || managedRuntime.Observe(state) is null)
+        {
+            LaunchManagedVsCode();
+            return;
+        }
+
+        try
+        {
+            companionBridge.RequestOpenCodex();
+            ShowIntegrationNotice("CodexStillLoading");
+        }
+        catch (InvalidOperationException)
+        {
+            ShowIntegrationError("CodexSidebarUnavailable");
+        }
+    }
+
+    private void ConfigureCodexShortcut()
+    {
+        try
+        {
+            companionBridge.RequestConfigureShortcut();
+        }
+        catch (InvalidOperationException)
+        {
+            ShowIntegrationError("ManagedVsCodeNotRunning");
+        }
+    }
+
+    private void SynchronizeCompanionState()
+    {
+        CompanionBridgeState? bridgeState = companionBridge.TryReadAndApplyLatest();
+        if (bridgeState is null)
+        {
+            return;
+        }
+
+        string? current = workspaceHistory.ReadLastWorkspace();
+        if (!string.IsNullOrWhiteSpace(current)
+            && !current.Equals(settings.LastOpenedWorkspace, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.LastOpenedWorkspace = current;
+            SaveSettings(settings);
+            trayIcon?.UpdateProjects(workspaceHistory.ReadSnapshot());
+            settingsWindow?.RefreshIntegrationPage();
+        }
+
+        if (bridgeState.ShortcutConflict && !shortcutConflictReported)
+        {
+            shortcutConflictReported = true;
+            ShowIntegrationNotice("CodexShortcutConflict");
+        }
+
+        if (bridgeState.SidebarStatus == lastSidebarStatus)
+        {
+            return;
+        }
+
+        lastSidebarStatus = bridgeState.SidebarStatus;
+        if (bridgeState.SidebarStatus == SidebarOpenStatus.Succeeded)
+        {
+            ShowIntegrationNotice("CodexReady");
+        }
+        else if (bridgeState.SidebarStatus == SidebarOpenStatus.Failed)
+        {
+            ShowIntegrationError("CodexSidebarOpenFailed");
+        }
     }
 
     private async Task InstallCodexExtensionAsync()
@@ -530,6 +683,12 @@ internal sealed class OverlayController : IDisposable
             SelectWorkspaceFolder,
             SelectWorkspaceFile,
             ClearWorkspaceForNextLaunch,
+            OpenCodexNow,
+            ConfigureCodexShortcut,
+            workspaceHistory.ReadSnapshot,
+            SelectRecentProject,
+            RemoveRecentProject,
+            ClearRecentProjects,
             GetIntegrationSnapshot,
             () => OpenFolder(settings.DedicatedVsCodeUserDataDirectory),
             () => _ = ImportVsCodeSetupAsync(),
@@ -707,6 +866,19 @@ internal sealed class OverlayController : IDisposable
         try
         {
             settings = updatedSettings;
+            if (!string.IsNullOrWhiteSpace(settings.LastOpenedWorkspace)
+                && (Directory.Exists(settings.LastOpenedWorkspace)
+                    || (File.Exists(settings.LastOpenedWorkspace)
+                        && Path.GetExtension(settings.LastOpenedWorkspace).Equals(
+                            ".code-workspace",
+                            StringComparison.OrdinalIgnoreCase)))
+                && !settings.LastOpenedWorkspace.Equals(
+                    workspaceHistory.ReadLastWorkspace(),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                workspaceHistory.SaveLastWorkspace(settings.LastOpenedWorkspace);
+                trayIcon?.UpdateProjects(workspaceHistory.ReadSnapshot());
+            }
             settingsService.Save(settings);
             statusService.SetStaleThreshold(TimeSpan.FromMinutes(settings.StaleDataThresholdMinutes));
             ApplySettings();
@@ -1460,11 +1632,75 @@ internal sealed class OverlayController : IDisposable
 
     private void ClearWorkspaceForNextLaunch()
     {
+        SetEmptyWorkspace();
+        RestartManagedVsCode();
+    }
+
+    private void SetEmptyWorkspace()
+    {
         settings.LastOpenedWorkspace = string.Empty;
         workspaceHistory.SaveLastWorkspace(null);
         SaveSettings(settings);
+        trayIcon?.UpdateProjects(workspaceHistory.ReadSnapshot());
         settingsWindow?.RefreshIntegrationPage();
+    }
+
+    private void SelectRecentProject(string projectPath)
+    {
+        if (!Directory.Exists(projectPath)
+            && !(File.Exists(projectPath)
+                && Path.GetExtension(projectPath).Equals(".code-workspace", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (ResolveMissingProject(projectPath))
+            {
+                RestartManagedVsCode();
+            }
+            return;
+        }
+
+        workspaceHistory.SaveLastWorkspace(projectPath);
+        settings.LastOpenedWorkspace = Path.GetFullPath(projectPath);
+        SaveSettings(settings);
+        trayIcon?.UpdateProjects(workspaceHistory.ReadSnapshot());
         RestartManagedVsCode();
+    }
+
+    private void RemoveRecentProject(string projectPath)
+    {
+        workspaceHistory.RemoveRecent(projectPath);
+        trayIcon?.UpdateProjects(workspaceHistory.ReadSnapshot());
+        settingsWindow?.RefreshIntegrationPage();
+    }
+
+    private void ClearRecentProjects()
+    {
+        workspaceHistory.ClearRecent();
+        trayIcon?.UpdateProjects(workspaceHistory.ReadSnapshot());
+        settingsWindow?.RefreshIntegrationPage();
+    }
+
+    private bool ResolveMissingProject(string projectPath)
+    {
+        MissingProjectAction action = MissingProjectDialog.Show(
+            settingsWindow,
+            overlayWindow?.Handle ?? IntPtr.Zero,
+            projectPath,
+            localizer);
+        switch (action)
+        {
+            case MissingProjectAction.ChooseAnother:
+                SelectWorkspaceFolder();
+                return workspaceHistory.ReadLastWorkspace() is string selected
+                    && !selected.Equals(projectPath, StringComparison.OrdinalIgnoreCase);
+            case MissingProjectAction.OpenEmpty:
+                SetEmptyWorkspace();
+                return true;
+            case MissingProjectAction.RemoveFromRecent:
+                RemoveRecentProject(projectPath);
+                return false;
+            default:
+                return false;
+        }
     }
 
     private VsCodeIntegrationSnapshot GetIntegrationSnapshot()
@@ -1478,7 +1714,7 @@ internal sealed class OverlayController : IDisposable
             lastExtensionActionStatus is { State: not CodexExtensionState.Installed }
                 ? lastExtensionActionStatus
                 : extensionManager.Detect(SelectedExtensionsDirectory),
-            FirstNonEmpty(settings.LastOpenedWorkspace, workspaceHistory.ReadLastWorkspace()),
+            FirstNonEmpty(workspaceHistory.ReadLastWorkspace(), settings.LastOpenedWorkspace),
             SelectedExtensionsDirectory,
             SelectedExtensionMode);
     }

@@ -23,4 +23,21 @@
   <ItemGroup>
     <ProjectReference Include="..\CodexVsCodeSwitcher.Core\CodexVsCodeSwitcher.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\CodexVsCodeSwitcher.Companion\package.json">
+      <Link>companion-extension\package.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\CodexVsCodeSwitcher.Companion\extension.js">
+      <Link>companion-extension\extension.js</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\CodexVsCodeSwitcher.Companion\companion-core.js">
+      <Link>companion-extension\companion-core.js</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

@@ -15,6 +15,9 @@ if (-not $dotnet) {
     throw "dotnet was not found. Install .NET 8 SDK or run the local SDK bootstrap used by this repository."
 }
 
+& (Join-Path $repo "build-companion.ps1")
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 & $dotnet.Source build (Join-Path $repo "CodexVsCodeSwitcher.sln") -c $Configuration -p:Platform=x64
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

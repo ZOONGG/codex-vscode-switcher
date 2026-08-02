@@ -41,6 +41,12 @@ internal sealed class SettingsWindow : Window
     private readonly Action selectWorkspaceFolder;
     private readonly Action selectWorkspaceFile;
     private readonly Action launchEmptyWorkspace;
+    private readonly Action openCodexNow;
+    private readonly Action configureCodexShortcut;
+    private readonly Func<WorkspaceHistorySnapshot> getWorkspaceHistory;
+    private readonly Action<string> selectRecentProject;
+    private readonly Action<string> removeRecentProject;
+    private readonly Action clearRecentProjects;
     private readonly Func<VsCodeIntegrationSnapshot> getIntegrationSnapshot;
     private readonly Action openDedicatedVsCodeData;
     private readonly Action importVsCodeSetup;
@@ -95,6 +101,12 @@ internal sealed class SettingsWindow : Window
         Action selectWorkspaceFolder,
         Action selectWorkspaceFile,
         Action launchEmptyWorkspace,
+        Action openCodexNow,
+        Action configureCodexShortcut,
+        Func<WorkspaceHistorySnapshot> getWorkspaceHistory,
+        Action<string> selectRecentProject,
+        Action<string> removeRecentProject,
+        Action clearRecentProjects,
         Func<VsCodeIntegrationSnapshot> getIntegrationSnapshot,
         Action openDedicatedVsCodeData,
         Action importVsCodeSetup,
@@ -134,6 +146,12 @@ internal sealed class SettingsWindow : Window
         this.selectWorkspaceFolder = selectWorkspaceFolder;
         this.selectWorkspaceFile = selectWorkspaceFile;
         this.launchEmptyWorkspace = launchEmptyWorkspace;
+        this.openCodexNow = openCodexNow;
+        this.configureCodexShortcut = configureCodexShortcut;
+        this.getWorkspaceHistory = getWorkspaceHistory;
+        this.selectRecentProject = selectRecentProject;
+        this.removeRecentProject = removeRecentProject;
+        this.clearRecentProjects = clearRecentProjects;
         this.getIntegrationSnapshot = getIntegrationSnapshot;
         this.openDedicatedVsCodeData = openDedicatedVsCodeData;
         this.importVsCodeSetup = importVsCodeSetup;
@@ -534,7 +552,10 @@ internal sealed class SettingsWindow : Window
                 (localizer["SelectWorkspaceFile"], "M 5 3 L 15 3 L 20 8 L 20 21 L 5 21 Z", selectWorkspaceFile, false),
                 (localizer["OpenWorkspaceInManagedVsCode"], "M 7 5 L 19 12 L 7 19 Z", restartManagedVsCode, true),
                 (localizer["OpenEmptyWindow"], "M 4 4 L 20 4 L 20 20 L 4 20 Z", launchEmptyWorkspace, false))));
+        stack.Children.Add(BuildRecentProjectsCard());
         stack.Children.Add(Card(CommandGrid(
+            (localizer["OpenCodexNow"], "M 4 5 L 20 5 L 20 18 L 13 18 L 8 22 L 8 18 L 4 18 Z", openCodexNow, true),
+            (localizer["ConfigureCodexShortcut"], "M 5 6 L 19 6 L 19 18 L 5 18 Z M 8 10 L 10 10 M 12 10 L 14 10 M 16 10 L 17 10", configureCodexShortcut, false),
             (localizer["LaunchManagedVsCode"], "M 7 5 L 19 12 L 7 19 Z", launchManagedVsCode, true),
             (localizer["RestartManagedVsCode"], "M 19 8 A 8 8 0 1 0 20 14 M 19 8 L 19 3 M 19 8 L 14 8", restartManagedVsCode, false),
             (localizer["InstallCodexExtension"], "M 12 3 L 12 16 M 7 11 L 12 16 L 17 11 M 5 20 L 19 20", installCodexExtension, false),
@@ -555,6 +576,78 @@ internal sealed class SettingsWindow : Window
                 (localizer["ResetNetworkingCache"], "M 5 5 L 19 5 L 19 19 L 5 19 Z M 8 8 L 16 16 M 16 8 L 8 16", resetNetworkingCache, false),
                 (localizer["ResetManagedRuntimeState"], "M 5 5 L 19 5 L 19 19 L 5 19 Z M 8 8 L 16 16 M 16 8 L 8 16", resetManagedRuntimeState, false))));
         return stack;
+    }
+
+    private UIElement BuildRecentProjectsCard()
+    {
+        WorkspaceHistorySnapshot history = getWorkspaceHistory();
+        var rows = new StackPanel();
+        foreach (WorkspaceDescriptor project in history.RecentProjects.Take(10))
+        {
+            if (project.Path is not string projectPath)
+            {
+                continue;
+            }
+
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var open = new Button
+            {
+                Content = project.DisplayName,
+                ToolTip = projectPath,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(12, 8, 12, 8),
+                FontWeight = history.CurrentProject?.Path?.Equals(
+                    projectPath,
+                    StringComparison.OrdinalIgnoreCase) == true
+                        ? FontWeights.SemiBold
+                        : FontWeights.Normal,
+            };
+            open.Click += (_, _) => selectRecentProject(projectPath);
+            row.Children.Add(open);
+            var remove = new Button
+            {
+                Content = localizer["Remove"],
+                Margin = new Thickness(8, 0, 0, 0),
+                Padding = new Thickness(12, 8, 12, 8),
+            };
+            remove.Click += (_, _) =>
+            {
+                removeRecentProject(projectPath);
+                Rebuild();
+            };
+            Grid.SetColumn(remove, 1);
+            row.Children.Add(remove);
+            rows.Children.Add(row);
+        }
+
+        if (rows.Children.Count == 0)
+        {
+            rows.Children.Add(new TextBlock
+            {
+                Text = localizer["NoRecentProjects"],
+                Foreground = Brush("MutedTextBrush"),
+                Margin = new Thickness(0, 0, 0, 8),
+            });
+        }
+        else
+        {
+            var clear = new Button
+            {
+                Content = localizer["ClearRecentProjects"],
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(12, 8, 12, 8),
+            };
+            clear.Click += (_, _) =>
+            {
+                clearRecentProjects();
+                Rebuild();
+            };
+            rows.Children.Add(clear);
+        }
+
+        return Card(SectionHeader(localizer["RecentProjects"], localizer["RecentProjectsHelp"]), rows);
     }
 
     private UIElement BuildAppearancePage()

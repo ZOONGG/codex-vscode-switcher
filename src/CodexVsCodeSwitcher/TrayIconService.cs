@@ -17,6 +17,7 @@ internal sealed class TrayIconService : IDisposable
     private string? activeProfile;
     private bool overlayVisible;
     private bool startWithWindows;
+    private WorkspaceHistorySnapshot projects = new(null, []);
     private bool disposed;
 
     public TrayIconService(Localizer localizer)
@@ -59,6 +60,12 @@ internal sealed class TrayIconService : IDisposable
 
     public event Action<string>? ProfileSelected;
 
+    public event Action<string>? ProjectSelected;
+
+    public event Action<string>? RemoveRecentProjectRequested;
+
+    public event Action? ClearRecentProjectsRequested;
+
     public event Action? ExitRequested;
 
     public void UpdateProfiles(IReadOnlyList<ProfileInfo> newProfiles, string? newActiveProfile)
@@ -70,6 +77,13 @@ internal sealed class TrayIconService : IDisposable
 
         profiles = newProfiles;
         activeProfile = newActiveProfile;
+        RebuildMenu();
+    }
+
+    public void UpdateProjects(WorkspaceHistorySnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        projects = snapshot;
         RebuildMenu();
     }
 
@@ -177,6 +191,45 @@ internal sealed class TrayIconService : IDisposable
         }
 
         menu.Items.Add(profilesMenu);
+        var projectsMenu = new ToolStripMenuItem(localizer["RecentProjects"]);
+        foreach (WorkspaceDescriptor project in projects.RecentProjects.Take(10))
+        {
+            string? projectPath = project.Path;
+            if (projectPath is null)
+            {
+                continue;
+            }
+
+            var item = new ToolStripMenuItem(project.DisplayName)
+            {
+                Checked = projects.CurrentProject?.Path?.Equals(
+                    projectPath,
+                    StringComparison.OrdinalIgnoreCase) == true,
+                ToolTipText = projectPath,
+            };
+            item.Click += (_, _) => ProjectSelected?.Invoke(projectPath);
+            var remove = new ToolStripMenuItem(localizer["RemoveFromRecent"]);
+            remove.Click += (_, _) => RemoveRecentProjectRequested?.Invoke(projectPath);
+            item.DropDownItems.Add(remove);
+            projectsMenu.DropDownItems.Add(item);
+        }
+
+        if (projectsMenu.DropDownItems.Count == 0)
+        {
+            projectsMenu.DropDownItems.Add(
+                new ToolStripMenuItem(localizer["NoRecentProjects"]) { Enabled = false });
+        }
+        else
+        {
+            projectsMenu.DropDownItems.Add(new ToolStripSeparator());
+            projectsMenu.DropDownItems.Add(
+                localizer["ClearRecentProjects"],
+                null,
+                (_, _) => ClearRecentProjectsRequested?.Invoke());
+        }
+
+        menu.Items.Add(projectsMenu);
+        menu.Items.Add(localizer["OpenCodexNow"], null, (_, _) => OpenCodexRequested?.Invoke());
         menu.Items.Add(localizer["Settings"], null, (_, _) => SettingsRequested?.Invoke());
         var startup = new ToolStripMenuItem(localizer["StartWithWindows"])
         {
