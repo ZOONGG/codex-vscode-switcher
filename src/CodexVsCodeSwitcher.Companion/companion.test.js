@@ -24,11 +24,32 @@ test('waits for extension activation and invokes the official sidebar command', 
         timeoutMs: 5000,
         retryDelayMs: 250,
         getExtension: () => ++lookups < 3 ? null : { isActive: false, activate: async () => { activated = true; } },
-        executeCommand: async () => { commands += 1; },
+        executeCommand: async () => {
+            commands += 1;
+            if (!activated) {
+                throw new Error('not active');
+            }
+        },
     });
     assert.equal(result.status, 'Succeeded');
     assert.equal(activated, true);
-    assert.equal(commands, 1);
+    assert.equal(commands, 2);
+});
+
+test('a hanging extension activation cannot escape the overall retry bound', async () => {
+    const started = Date.now();
+    const result = await openSidebarWithRetry({
+        now: Date.now,
+        delay: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
+        timeoutMs: 45,
+        retryDelayMs: 5,
+        attemptTimeoutMs: 10,
+        getExtension: () => ({ isActive: false, activate: () => new Promise(() => {}) }),
+        executeCommand: async () => { throw new Error('not ready'); },
+    });
+    assert.equal(result.status, 'Failed');
+    assert.equal(result.failureCode, 'command-timeout');
+    assert.ok(Date.now() - started < 250);
 });
 
 test('bounded retries stop and return a sidebar-only failure', async () => {

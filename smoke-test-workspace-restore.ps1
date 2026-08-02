@@ -34,14 +34,26 @@ function Get-SmokeProcesses {
 }
 
 function Wait-ForBridgeState {
-    param([string]$SessionId, [DateTimeOffset]$AfterTimestamp)
+    param(
+        [string]$SessionId,
+        [DateTimeOffset]$AfterTimestamp,
+        [string]$RequiredSidebarStatus = ""
+    )
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         if (Test-Path -LiteralPath $stateFile -PathType Leaf) {
             try {
                 $state = Get-Content -Raw -LiteralPath $stateFile | ConvertFrom-Json
                 $timestamp = [DateTimeOffset]::Parse($state.timestampUtc)
-                if ($state.sessionId -eq $SessionId -and $timestamp -gt $AfterTimestamp) { return $state }
+                if ($state.sessionId -eq $SessionId -and $timestamp -gt $AfterTimestamp) {
+                    if ([string]::IsNullOrWhiteSpace($RequiredSidebarStatus) -or
+                        $state.sidebarStatus -eq $RequiredSidebarStatus) {
+                        return $state
+                    }
+                    if ($RequiredSidebarStatus -eq "Succeeded" -and $state.sidebarStatus -eq "Failed") {
+                        return $state
+                    }
+                }
             } catch {
             }
         }
@@ -89,7 +101,7 @@ function Start-SmokeCycle {
     $temporaryCommand = Join-Path $bridge (".command-" + [Guid]::NewGuid().ToString("N") + ".tmp")
     $command | ConvertTo-Json | Set-Content -LiteralPath $temporaryCommand -Encoding utf8NoBOM
     Move-Item -LiteralPath $temporaryCommand -Destination $commandFile -Force
-    $commandState = Wait-ForBridgeState -SessionId $session -AfterTimestamp $beforeCommand
+    $commandState = Wait-ForBridgeState -SessionId $session -AfterTimestamp $beforeCommand -RequiredSidebarStatus "Succeeded"
     if ($commandState.sidebarStatus -ne "Succeeded") { throw "chatgpt.openSidebar was not accepted: $($commandState.sidebarFailureCode)" }
     [pscustomobject]@{ Process = $process; SessionId = $session; State = $commandState }
 }
@@ -140,6 +152,17 @@ try {
     } | ConvertTo-Json -Depth 4
 }
 finally {
+    $remaining = @(Get-SmokeProcesses)
+    foreach ($item in $remaining) {
+        $candidate = Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue
+        if ($null -ne $candidate -and $candidate.MainWindowHandle -ne [IntPtr]::Zero) {
+            [void]$candidate.CloseMainWindow()
+        }
+    }
+    $closeDeadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
+    while ([DateTimeOffset]::UtcNow -lt $closeDeadline -and (Get-SmokeProcesses).Count -gt 0) {
+        Start-Sleep -Milliseconds 250
+    }
     if ((Get-SmokeProcesses).Count -eq 0 -and (Test-Path -LiteralPath $temporaryRoot)) {
         $resolved = [IO.Path]::GetFullPath($temporaryRoot)
         $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())

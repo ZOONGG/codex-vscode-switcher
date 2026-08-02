@@ -72,6 +72,7 @@ async function openCodexWithRetry() {
         delay,
         timeoutMs: SIDEBAR_TIMEOUT_MS,
         retryDelayMs: RETRY_DELAY_MS,
+        attemptTimeoutMs: 3000,
         getExtension: () => vscode.extensions.getExtension(CODEX_EXTENSION_ID),
         executeCommand: () => vscode.commands.executeCommand(OPEN_CODEX_COMMAND),
     });

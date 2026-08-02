@@ -10,10 +10,20 @@ async function openSidebarWithRetry(options) {
             sawExtension = true;
             attempts += 1;
             try {
-                if (!extension.isActive) {
-                    await extension.activate();
-                }
-                await options.executeCommand();
+                const attemptTimeoutMs = Math.max(1, Math.min(
+                    options.attemptTimeoutMs || 3000,
+                    options.timeoutMs - (options.now() - startedAt)));
+                await withTimeout((async () => {
+                    try {
+                        await options.executeCommand();
+                        return;
+                    } catch {
+                        if (!extension.isActive) {
+                            await extension.activate();
+                        }
+                        await options.executeCommand();
+                    }
+                })(), attemptTimeoutMs);
                 return { status: 'Succeeded', failureCode: null, attempts };
             } catch {
                 // Extension activation and command registration can complete on different ticks.
@@ -31,6 +41,20 @@ async function openSidebarWithRetry(options) {
         failureCode: sawExtension ? 'command-timeout' : 'extension-missing',
         attempts,
     };
+}
+
+async function withTimeout(promise, timeoutMs) {
+    let timeout;
+    try {
+        await Promise.race([
+            promise,
+            new Promise((_, reject) => {
+                timeout = setTimeout(() => reject(new Error('operation-timeout')), timeoutMs);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timeout);
+    }
 }
 
 function describeWorkspace(workspaceFile, folderPaths) {
