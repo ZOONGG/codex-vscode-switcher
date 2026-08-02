@@ -88,6 +88,40 @@ public sealed class VsCodeLaunchPlanBuilder
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
     }
 
+    public VsCodeProcessStartSpec BuildExtensionHostRestart(
+        string executablePath,
+        string userDataDirectory,
+        string extensionsDirectory,
+        string sharedDataDirectory,
+        string profileCodexHome,
+        VsCodeExtensionMode extensionMode,
+        CustomCaEnvironmentVariable customCaVariable,
+        string? customCaCertificatePath)
+    {
+        var arguments = new List<string>
+        {
+            "--user-data-dir",
+            RequireFullPath(userDataDirectory, nameof(userDataDirectory)),
+            "--shared-data-dir",
+            RequireFullPath(sharedDataDirectory, nameof(sharedDataDirectory)),
+            "--reuse-window",
+            "vscode://command/workbench.action.restartExtensionHost",
+        };
+        if (extensionMode == VsCodeExtensionMode.Isolated)
+        {
+            arguments.Insert(2, "--extensions-dir");
+            arguments.Insert(3, RequireFullPath(extensionsDirectory, nameof(extensionsDirectory)));
+        }
+
+        return new VsCodeProcessStartSpec(
+            RequireFullPath(executablePath, nameof(executablePath)),
+            arguments,
+            ManagedEnvironmentOverridesBuilder.Build(
+                RequireFullPath(profileCodexHome, nameof(profileCodexHome)),
+                customCaVariable,
+                customCaCertificatePath));
+    }
+
     private static string RequireFullPath(string value, string parameterName)
     {
         if (string.IsNullOrWhiteSpace(value))
