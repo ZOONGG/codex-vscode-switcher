@@ -142,6 +142,22 @@ public sealed class BootstrapArchitectureTests
         Assert.DoesNotContain("Directory.GetFiles", source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CompanionUsesOfficialSidebarCommandShortcutAndStatusBarWithoutNetworkPorts()
+    {
+        string manifest = ReadRepositoryFile("src", "CodexVsCodeSwitcher.Companion", "package.json");
+        string extension = ReadRepositoryFile("src", "CodexVsCodeSwitcher.Companion", "extension.js");
+
+        Assert.Contains("ctrl+alt+c", manifest, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("chatgpt.openSidebar", extension, StringComparison.Ordinal);
+        Assert.Contains("createStatusBarItem", extension, StringComparison.Ordinal);
+        Assert.Contains("Codex", extension, StringComparison.Ordinal);
+        Assert.Contains("onDidChangeWorkspaceFolders", extension, StringComparison.Ordinal);
+        Assert.DoesNotContain("createServer", extension, StringComparison.Ordinal);
+        Assert.DoesNotContain("http.listen", extension, StringComparison.Ordinal);
+        Assert.DoesNotContain("File.ReadAllText", extension, StringComparison.Ordinal);
+    }
+
     private static string ReadRepositoryFile(params string[] parts)
         => File.ReadAllText(Path.Combine([FindRepositoryRoot(), .. parts]));
 

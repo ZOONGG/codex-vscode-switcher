@@ -481,6 +481,46 @@ public sealed class ManagedVsCodeIntegrationTests
     }
 
     [Fact]
+    public async Task RepeatedSwitching_PreservesOneGlobalWorkspaceAcrossProfiles()
+    {
+        using var context = new ActivationContext();
+        string workspace = Path.Combine(context.Root, "MoonRise");
+        Directory.CreateDirectory(workspace);
+
+        await context.ActivateAsync("alpha", workspace);
+        await context.ActivateAsync("beta", context.WorkspaceHistory.ReadLastWorkspace());
+        await context.ActivateAsync("gamma", context.WorkspaceHistory.ReadLastWorkspace());
+        await context.ActivateAsync("alpha", context.WorkspaceHistory.ReadLastWorkspace());
+
+        Assert.Equal(4, context.Runtime.LaunchPlans.Count);
+        Assert.All(context.Runtime.LaunchPlans, plan => Assert.Equal(
+            Path.GetFullPath(workspace),
+            plan.Arguments[^1]));
+        Assert.Equal(Path.GetFullPath(workspace), context.WorkspaceHistory.ReadLastWorkspace());
+    }
+
+    [Fact]
+    public async Task SidebarLifecycle_DoesNotChangeSuccessfulProfileActivationResult()
+    {
+        using var context = new ActivationContext();
+        string companionPath = Path.Combine(context.Root, "companion");
+        string bridgePath = Path.Combine(context.Root, "bridge");
+        Directory.CreateDirectory(companionPath);
+        Directory.CreateDirectory(bridgePath);
+        var companion = new ManagedCompanionLaunchOptions(
+            companionPath,
+            bridgePath,
+            "test-session",
+            true);
+
+        ProfileActivationResult result = await context.ActivateAsync("alpha", companion: companion);
+
+        Assert.Equal(ProfileActivationStatus.Succeeded, result.Status);
+        Assert.Equal("1", context.Runtime.LaunchPlans.Single().EnvironmentOverrides[
+            CompanionBridgeService.OpenCodexEnvironmentVariable]);
+    }
+
+    [Fact]
     public async Task WindowTimeout_ReleasesSwitchLockAndAllowsRetry()
     {
         using var context = new ActivationContext();
@@ -780,7 +820,8 @@ public sealed class ManagedVsCodeIntegrationTests
         public Task<ProfileActivationResult> ActivateAsync(
             string profile,
             string? workspace = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            ManagedCompanionLaunchOptions? companion = null)
             => Service.ActivateAsync(
                 profile,
                 ExecutablePath,
@@ -795,7 +836,8 @@ public sealed class ManagedVsCodeIntegrationTests
                 extensionMode: VsCodeExtensionMode.Isolated,
                 customCaVariable: CustomCaEnvironmentVariable.None,
                 customCaCertificatePath: null,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken,
+                companion: companion);
 
         public void ConfigurePreviousManagedProfile(string profile)
         {

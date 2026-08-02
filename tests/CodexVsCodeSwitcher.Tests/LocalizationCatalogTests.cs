@@ -82,4 +82,30 @@ public sealed class LocalizationCatalogTests
         Assert.Equal("Средний остаток", LocalizationCatalog.Text(LanguagePreference.Russian, "MediumCapacity"));
         Assert.Equal("Лимит почти закончился", LocalizationCatalog.Text(LanguagePreference.Russian, "LowCapacity"));
     }
+
+    [Fact]
+    public void WorkspaceAndCodexEntryPointCopyIsCompleteInEnglishAndRussian()
+    {
+        string[] keys =
+        [
+            "CurrentProject",
+            "LastProject",
+            "RecentProjects",
+            "OpenCodexNow",
+            "LaunchCodexSidebar",
+            "CodexReady",
+            "CodexStillLoading",
+            "CodexSidebarOpenFailed",
+            "FirstLaunchProjectTitle",
+            "RemoveFromRecent",
+        ];
+        foreach (string key in keys)
+        {
+            Assert.NotEqual(key, LocalizationCatalog.Text(LanguagePreference.English, key));
+            Assert.NotEqual(key, LocalizationCatalog.Text(LanguagePreference.Russian, key));
+        }
+
+        Assert.Equal("Open Codex automatically", LocalizationCatalog.Text(LanguagePreference.English, "LaunchCodexSidebar"));
+        Assert.Equal("Автоматически открывать Codex", LocalizationCatalog.Text(LanguagePreference.Russian, "LaunchCodexSidebar"));
+    }
 }
