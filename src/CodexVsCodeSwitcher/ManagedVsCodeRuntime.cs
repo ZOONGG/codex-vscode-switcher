@@ -83,7 +83,7 @@ internal sealed class ManagedVsCodeRuntime : IManagedVsCodeRuntime
 
     public ManagedProcessIdentity Launch(VsCodeProcessStartSpec startSpec)
     {
-        Process process = Process.Start(ProcessCommandRunner.CreateStartInfo(startSpec))
+        Process process = Process.Start(ManagedProcessStartInfoFactory.Create(startSpec))
             ?? throw new InvalidOperationException("The managed VS Code process could not be started.");
         using (process)
         {

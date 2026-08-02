@@ -22,10 +22,7 @@ public sealed class ManagedProcessIdentityPolicy
                 evidence.CommandLineArguments,
                 "--user-data-dir",
                 expected.UserDataDirectory)
-            && HasArgumentValue(
-                evidence.CommandLineArguments,
-                "--extensions-dir",
-                expected.ExtensionsDirectory)
+            && HasExpectedExtensionArguments(expected, evidence.CommandLineArguments)
             && HasArgumentValue(
                 evidence.CommandLineArguments,
                 "--shared-data-dir",
@@ -49,10 +46,7 @@ public sealed class ManagedProcessIdentityPolicy
                 evidence.CommandLineArguments,
                 "--user-data-dir",
                 expected.UserDataDirectory)
-            && HasArgumentValue(
-                evidence.CommandLineArguments,
-                "--extensions-dir",
-                expected.ExtensionsDirectory)
+            && HasExpectedExtensionArguments(expected, evidence.CommandLineArguments)
             && HasArgumentValue(
                 evidence.CommandLineArguments,
                 "--shared-data-dir",
@@ -71,15 +65,24 @@ public sealed class ManagedProcessIdentityPolicy
                 evidence.CommandLineArguments,
                 "--user-data-dir",
                 expected.UserDataDirectory)
-            && HasArgumentValue(
-                evidence.CommandLineArguments,
-                "--extensions-dir",
-                expected.ExtensionsDirectory)
+            && HasExpectedExtensionArguments(expected, evidence.CommandLineArguments)
             && HasArgumentValue(
                 evidence.CommandLineArguments,
                 "--shared-data-dir",
                 expected.SharedDataDirectory);
     }
+
+    private static bool HasExpectedExtensionArguments(
+        ManagedVsCodeInstanceState expected,
+        IReadOnlyList<string> arguments)
+        => expected.ExtensionMode == VsCodeExtensionMode.Shared
+            ? !HasArgument(arguments, "--extensions-dir")
+            : HasArgumentValue(arguments, "--extensions-dir", expected.ExtensionsDirectory);
+
+    private static bool HasArgument(IReadOnlyList<string> arguments, string option)
+        => arguments.Any(argument =>
+            argument.Equals(option, StringComparison.OrdinalIgnoreCase)
+            || argument.StartsWith(option + "=", StringComparison.OrdinalIgnoreCase));
 
     private static bool HasArgumentValue(
         IReadOnlyList<string> arguments,

@@ -227,13 +227,14 @@ internal sealed class OverlayController : IDisposable
                     profile,
                     settings.CustomVsCodeExecutablePath,
                     settings.DedicatedVsCodeUserDataDirectory,
-                    settings.DedicatedVsCodeExtensionsDirectory,
+                    SelectedExtensionsDirectory,
                     settings.DedicatedVsCodeSharedDataDirectory,
                     workspace,
                     TimeSpan.FromSeconds(settings.GracefulCloseTimeoutSeconds),
                     restartIfActive,
                     requireExtension: true,
                     openCodexOnStartup: settings.LaunchCodexSidebarOnStartup,
+                    extensionMode: SelectedExtensionMode,
                     progress: new Progress<string>(
                         key => overlayWindow?.SetSwitchingStatus(localizer[key])),
                     cancellationToken: disposalTokenSource.Token)
@@ -274,7 +275,7 @@ internal sealed class OverlayController : IDisposable
                 executableLocator.Locate(settings.CustomVsCodeExecutablePath)
                     ?? settings.CustomVsCodeExecutablePath,
                 settings.DedicatedVsCodeUserDataDirectory,
-                settings.DedicatedVsCodeExtensionsDirectory,
+                SelectedExtensionsDirectory,
                 settings.DedicatedVsCodeSharedDataDirectory,
                 profile,
                 settings.LastOpenedWorkspace,
@@ -338,6 +339,14 @@ internal sealed class OverlayController : IDisposable
 
     private async Task<CodexExtensionStatus> InstallCodexExtensionCoreAsync()
     {
+        if (SelectedExtensionMode == VsCodeExtensionMode.Shared)
+        {
+            ShowIntegrationNotice("SharedExtensionsInstallDisabled");
+            return new CodexExtensionStatus(
+                CodexExtensionState.Missing,
+                DetailKey: "SharedExtensionsInstallDisabled");
+        }
+
         string? executable = executableLocator.Locate(settings.CustomVsCodeExecutablePath);
         if (executable is null)
         {
@@ -393,7 +402,7 @@ internal sealed class OverlayController : IDisposable
             return false;
         }
 
-        CodexExtensionStatus current = extensionManager.Detect(settings.DedicatedVsCodeExtensionsDirectory);
+        CodexExtensionStatus current = extensionManager.Detect(SelectedExtensionsDirectory);
         if (current.State == CodexExtensionState.Installed)
         {
             return true;
@@ -403,6 +412,12 @@ internal sealed class OverlayController : IDisposable
         IntPtr nativeOwner = owner is null && overlayWindow?.IsVisible == true
             ? overlayWindow.Handle
             : IntPtr.Zero;
+        if (SelectedExtensionMode == VsCodeExtensionMode.Shared)
+        {
+            ShowIntegrationError("SharedCodexExtensionMissing");
+            return false;
+        }
+
         bool approved = ConfirmDialog.Show(
             owner,
             nativeOwner,
@@ -857,7 +872,7 @@ internal sealed class OverlayController : IDisposable
             executableLocator.Locate(settings.CustomVsCodeExecutablePath)
                 ?? settings.CustomVsCodeExecutablePath,
             settings.DedicatedVsCodeUserDataDirectory,
-            settings.DedicatedVsCodeExtensionsDirectory,
+            SelectedExtensionsDirectory,
             settings.DedicatedVsCodeSharedDataDirectory,
             profileId,
             workspace,
@@ -1097,8 +1112,10 @@ internal sealed class OverlayController : IDisposable
             activeProfileStore.Read(),
             lastExtensionActionStatus is { State: not CodexExtensionState.Installed }
                 ? lastExtensionActionStatus
-                : extensionManager.Detect(settings.DedicatedVsCodeExtensionsDirectory),
-            FirstNonEmpty(settings.LastOpenedWorkspace, workspaceHistory.ReadLastWorkspace()));
+                : extensionManager.Detect(SelectedExtensionsDirectory),
+            FirstNonEmpty(settings.LastOpenedWorkspace, workspaceHistory.ReadLastWorkspace()),
+            SelectedExtensionsDirectory,
+            SelectedExtensionMode);
     }
 
     private void ShowIntegrationError(string messageKey)
@@ -1121,6 +1138,16 @@ internal sealed class OverlayController : IDisposable
             : !string.IsNullOrWhiteSpace(second)
                 ? second
                 : null;
+
+    private VsCodeExtensionMode SelectedExtensionMode
+        => settings.UseExistingVsCodeExtensions
+            ? VsCodeExtensionMode.Shared
+            : VsCodeExtensionMode.Isolated;
+
+    private string SelectedExtensionsDirectory
+        => SelectedExtensionMode == VsCodeExtensionMode.Shared
+            ? paths.VsCodeSharedExtensionsDirectory
+            : settings.DedicatedVsCodeExtensionsDirectory;
 
     private void OpenFolder(string folder)
     {

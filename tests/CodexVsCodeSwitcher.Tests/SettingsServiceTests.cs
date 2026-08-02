@@ -121,6 +121,8 @@ public sealed class SettingsServiceTests
 
         var loaded = service.Load();
 
+        Assert.True(loaded.UseExistingVsCodeExtensions);
+
         Assert.Equal(LanguagePreference.Russian, loaded.Language);
         Assert.Equal(AppTheme.Light, loaded.Theme);
         Assert.Equal(OverlayOrientation.Vertical, loaded.Orientation);

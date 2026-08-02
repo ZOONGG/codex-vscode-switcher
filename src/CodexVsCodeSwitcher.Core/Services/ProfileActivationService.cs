@@ -69,6 +69,7 @@ public sealed class ProfileActivationService
         bool restartIfAlreadyActive,
         bool requireExtension,
         bool openCodexOnStartup,
+        VsCodeExtensionMode extensionMode,
         IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -90,6 +91,7 @@ public sealed class ProfileActivationService
                 restartIfAlreadyActive,
                 requireExtension,
                 openCodexOnStartup,
+                extensionMode,
                 progress,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -121,6 +123,7 @@ public sealed class ProfileActivationService
         bool restartIfAlreadyActive,
         bool requireExtension,
         bool openCodexOnStartup,
+        VsCodeExtensionMode extensionMode,
         IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
@@ -174,14 +177,21 @@ public sealed class ProfileActivationService
             extensions = Path.GetFullPath(extensionsDirectory);
             sharedData = Path.GetFullPath(sharedDataDirectory);
             protectedPaths.AssertCanWrite(userData);
-            protectedPaths.AssertCanWrite(extensions);
             protectedPaths.AssertCanWrite(sharedData);
             Directory.CreateDirectory(userData);
-            Directory.CreateDirectory(extensions);
             Directory.CreateDirectory(sharedData);
             AssertDirectoryWritable(userData);
-            AssertDirectoryWritable(extensions);
             AssertDirectoryWritable(sharedData);
+            if (extensionMode == VsCodeExtensionMode.Isolated)
+            {
+                protectedPaths.AssertCanWrite(extensions);
+                Directory.CreateDirectory(extensions);
+                AssertDirectoryWritable(extensions);
+            }
+            else
+            {
+                protectedPaths.AssertCanRead(extensions);
+            }
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -269,6 +279,7 @@ public sealed class ProfileActivationService
             sharedData,
             workspace,
             openCodexOnStartup,
+            extensionMode,
             progress,
             cancellationToken).ConfigureAwait(false);
         if (launchResult.Status == ProfileActivationStatus.Succeeded
@@ -311,6 +322,7 @@ public sealed class ProfileActivationService
         string sharedData,
         string? workspace,
         bool openCodexOnStartup,
+        VsCodeExtensionMode extensionMode,
         IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
@@ -323,7 +335,8 @@ public sealed class ProfileActivationService
                 extensions,
                 sharedData,
                 profile.DirectoryPath,
-                workspace);
+                workspace,
+                extensionMode);
             ManagedProcessIdentity launched = runtime.Launch(plan);
             var pendingState = new ManagedVsCodeInstanceState(
                 launched.ProcessId,
@@ -335,7 +348,8 @@ public sealed class ProfileActivationService
                 extensions,
                 sharedData,
                 0,
-                DateTimeOffset.UtcNow);
+                DateTimeOffset.UtcNow,
+                extensionMode);
             instanceStore.Write(pendingState);
             progress?.Report("WaitingForVsCodeWindow");
             ManagedWindowWaitResult waitResult = await runtime.WaitForWindowAsync(
@@ -464,6 +478,7 @@ public sealed class ProfileActivationService
             previousState.SharedDataDirectory,
             previousState.WorkspacePath,
             openCodexOnStartup,
+            previousState.ExtensionMode,
             progress,
             cancellationToken).ConfigureAwait(false);
     }

@@ -5,6 +5,12 @@ public sealed record VsCodeProcessStartSpec(
     IReadOnlyList<string> Arguments,
     IReadOnlyDictionary<string, string> EnvironmentOverrides);
 
+public enum VsCodeExtensionMode
+{
+    Isolated,
+    Shared,
+}
+
 public sealed record ManagedProcessIdentity(
     int ProcessId,
     DateTimeOffset StartTimeUtc);
@@ -32,7 +38,8 @@ public sealed record ManagedVsCodeInstanceState(
     string ExtensionsDirectory,
     string SharedDataDirectory,
     long LastVerifiedWindowHandle,
-    DateTimeOffset LaunchTimestampUtc);
+    DateTimeOffset LaunchTimestampUtc,
+    VsCodeExtensionMode ExtensionMode = VsCodeExtensionMode.Isolated);
 
 public sealed record ManagedVsCodeObservation(
     ManagedVsCodeInstanceState State,
@@ -153,4 +160,6 @@ public sealed record VsCodeIntegrationSnapshot(
     ManagedInstanceStatus ManagedStatus,
     string? ActiveProfileId,
     CodexExtensionStatus ExtensionStatus,
-    string? WorkspacePath);
+    string? WorkspacePath,
+    string? ExtensionsDirectory = null,
+    VsCodeExtensionMode ExtensionMode = VsCodeExtensionMode.Isolated);

@@ -8,7 +8,7 @@ internal sealed class ProcessCommandRunner : IProcessCommandRunner
 {
     public async Task<int> RunAsync(VsCodeProcessStartSpec startSpec, CancellationToken cancellationToken)
     {
-        using Process process = Process.Start(CreateStartInfo(startSpec))
+        using Process process = Process.Start(ManagedProcessStartInfoFactory.Create(startSpec))
             ?? throw new InvalidOperationException("The VS Code command could not be started.");
         try
         {
@@ -20,28 +20,6 @@ internal sealed class ProcessCommandRunner : IProcessCommandRunner
             TryKill(process);
             throw;
         }
-    }
-
-    internal static ProcessStartInfo CreateStartInfo(VsCodeProcessStartSpec startSpec)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = startSpec.ExecutablePath,
-            UseShellExecute = false,
-            CreateNoWindow = false,
-            WorkingDirectory = Path.GetDirectoryName(startSpec.ExecutablePath) ?? string.Empty,
-        };
-        foreach (string argument in startSpec.Arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        foreach ((string name, string value) in startSpec.EnvironmentOverrides)
-        {
-            startInfo.Environment[name] = value;
-        }
-
-        return startInfo;
     }
 
     private static void TryKill(Process process)

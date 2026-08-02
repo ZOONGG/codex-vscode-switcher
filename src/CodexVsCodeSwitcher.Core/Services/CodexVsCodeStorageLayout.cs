@@ -18,6 +18,7 @@ public sealed class CodexVsCodeStorageLayout
         RemovedProfilesDirectory = Combine(ApplicationDataDirectory, "removed-profiles");
         VsCodeUserDataDirectory = Combine(ApplicationDataDirectory, "VSCodeData");
         VsCodeExtensionsDirectory = Combine(ApplicationDataDirectory, "VSCodeExtensions");
+        VsCodeSharedExtensionsDirectory = Combine(UserProfile, ".vscode", "extensions");
         VsCodeSharedDataDirectory = Combine(ApplicationDataDirectory, "VSCodeSharedData");
         LastWorkspaceMetadataFile = Combine(ApplicationDataDirectory, "last-workspace.json");
         ManagedInstanceMetadataFile = Combine(ApplicationDataDirectory, "managed-vscode.json");
@@ -41,6 +42,7 @@ public sealed class CodexVsCodeStorageLayout
     public string RemovedProfilesDirectory { get; }
     public string VsCodeUserDataDirectory { get; }
     public string VsCodeExtensionsDirectory { get; }
+    public string VsCodeSharedExtensionsDirectory { get; }
     public string VsCodeSharedDataDirectory { get; }
     public string LastWorkspaceMetadataFile { get; }
     public string ManagedInstanceMetadataFile { get; }
@@ -64,6 +66,6 @@ public sealed class CodexVsCodeStorageLayout
         return Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
     }
 
-    private static string Combine(string root, string child)
-        => Path.GetFullPath(Path.Combine(root, child));
+    private static string Combine(string root, params string[] children)
+        => Path.GetFullPath(children.Aggregate(root, Path.Combine));
 }

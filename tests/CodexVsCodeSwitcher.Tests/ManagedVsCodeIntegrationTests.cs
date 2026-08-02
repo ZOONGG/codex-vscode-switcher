@@ -20,6 +20,60 @@ public sealed class ManagedVsCodeIntegrationTests
     }
 
     [Fact]
+    public void ProcessStartInfo_PreservesTheCompleteParentEnvironmentAndOverridesOnlyCodexHome()
+    {
+        using var temp = new TempDirectory();
+        VsCodeProcessStartSpec plan = BuildPlan(temp.Path, workspace: null);
+
+        System.Diagnostics.ProcessStartInfo startInfo = ManagedProcessStartInfoFactory.Create(plan);
+        var inherited = Environment.GetEnvironmentVariables();
+
+        foreach (System.Collections.DictionaryEntry variable in inherited)
+        {
+            string name = Assert.IsType<string>(variable.Key);
+            string value = Assert.IsType<string>(variable.Value);
+            if (name.Equals(VsCodeLaunchPlanBuilder.CodexHomeVariable, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            Assert.True(startInfo.Environment.TryGetValue(name, out string? actual));
+            Assert.Equal(value, actual);
+        }
+
+        Assert.Equal(Path.Combine(temp.Path, "profile"), startInfo.Environment["CODEX_HOME"]);
+        Assert.Equal(Environment.GetEnvironmentVariable("PATH"), startInfo.Environment["PATH"]);
+    }
+
+    [Theory]
+    [InlineData("HTTP_PROXY")]
+    [InlineData("HTTPS_PROXY")]
+    [InlineData("ALL_PROXY")]
+    [InlineData("NO_PROXY")]
+    [InlineData("CODEX_CA_CERTIFICATE")]
+    [InlineData("SSL_CERT_FILE")]
+    [InlineData("SSL_CERT_DIR")]
+    [InlineData("NODE_EXTRA_CA_CERTS")]
+    [InlineData("REQUESTS_CA_BUNDLE")]
+    [InlineData("CURL_CA_BUNDLE")]
+    public void ProcessStartInfo_PreservesNetworkVariableWhenPresent(string variableName)
+    {
+        using var temp = new TempDirectory();
+        string? inherited = Environment.GetEnvironmentVariable(variableName);
+        System.Diagnostics.ProcessStartInfo startInfo =
+            ManagedProcessStartInfoFactory.Create(BuildPlan(temp.Path, workspace: null));
+
+        if (inherited is null)
+        {
+            Assert.False(startInfo.Environment.ContainsKey(variableName));
+        }
+        else
+        {
+            Assert.Equal(inherited, startInfo.Environment[variableName]);
+        }
+    }
+
+    [Fact]
     public void LaunchPlan_AlwaysUsesDedicatedArgumentsAndNewWindow()
     {
         using var temp = new TempDirectory();
@@ -29,6 +83,22 @@ public sealed class ManagedVsCodeIntegrationTests
         AssertArgumentValue(plan.Arguments, "--user-data-dir", Path.Combine(temp.Path, "data"));
         AssertArgumentValue(plan.Arguments, "--extensions-dir", Path.Combine(temp.Path, "extensions"));
         Assert.Contains("--new-window", plan.Arguments);
+    }
+
+    [Fact]
+    public void SharedExtensionsLaunchPlan_OmitsExtensionsDirectoryArgument()
+    {
+        using var temp = new TempDirectory();
+
+        VsCodeProcessStartSpec plan = BuildPlan(
+            temp.Path,
+            workspace: null,
+            VsCodeExtensionMode.Shared);
+
+        Assert.DoesNotContain("--extensions-dir", plan.Arguments);
+        Assert.DoesNotContain(Path.Combine(temp.Path, "extensions"), plan.Arguments);
+        AssertArgumentValue(plan.Arguments, "--user-data-dir", Path.Combine(temp.Path, "data"));
+        AssertArgumentValue(plan.Arguments, "--shared-data-dir", Path.Combine(temp.Path, "shared-data"));
     }
 
     [Fact]
@@ -111,6 +181,41 @@ public sealed class ManagedVsCodeIntegrationTests
             ]);
 
         Assert.True(new ManagedProcessIdentityPolicy().IsManagedRoot(state, evidence));
+    }
+
+    [Fact]
+    public void ManagedIdentity_AcceptsSharedExtensionsOnlyWithoutExtensionsArgument()
+    {
+        using var temp = new TempDirectory();
+        ManagedVsCodeInstanceState state = State(temp.Path, processId: 42) with
+        {
+            ExtensionMode = VsCodeExtensionMode.Shared,
+        };
+        var sharedEvidence = new ProcessIdentityEvidence(
+            42,
+            state.RootProcessStartTimeUtc,
+            state.ExecutablePath,
+            [
+                state.ExecutablePath,
+                "--user-data-dir",
+                state.UserDataDirectory,
+                "--shared-data-dir",
+                state.SharedDataDirectory,
+                "--new-window",
+            ]);
+        var isolatedEvidence = sharedEvidence with
+        {
+            CommandLineArguments =
+            [
+                .. sharedEvidence.CommandLineArguments,
+                "--extensions-dir",
+                state.ExtensionsDirectory,
+            ],
+        };
+
+        var policy = new ManagedProcessIdentityPolicy();
+        Assert.True(policy.IsManagedRoot(state, sharedEvidence));
+        Assert.False(policy.IsManagedRoot(state, isolatedEvidence));
     }
 
     [Fact]
@@ -593,14 +698,18 @@ public sealed class ManagedVsCodeIntegrationTests
         Assert.Null(history.ReadLastWorkspace());
     }
 
-    private static VsCodeProcessStartSpec BuildPlan(string root, string? workspace)
+    private static VsCodeProcessStartSpec BuildPlan(
+        string root,
+        string? workspace,
+        VsCodeExtensionMode extensionMode = VsCodeExtensionMode.Isolated)
         => new VsCodeLaunchPlanBuilder().Build(
             Path.Combine(root, "Code.exe"),
             Path.Combine(root, "data"),
             Path.Combine(root, "extensions"),
             Path.Combine(root, "shared-data"),
             Path.Combine(root, "profile"),
-            workspace);
+            workspace,
+            extensionMode);
 
     private static ManagedVsCodeInstanceState State(string root, int processId)
         => new(
@@ -683,6 +792,7 @@ public sealed class ManagedVsCodeIntegrationTests
                 restartIfAlreadyActive: false,
                 requireExtension: true,
                 openCodexOnStartup: true,
+                extensionMode: VsCodeExtensionMode.Isolated,
                 cancellationToken: cancellationToken);
 
         public void ConfigurePreviousManagedProfile(string profile)

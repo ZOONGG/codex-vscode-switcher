@@ -21,6 +21,7 @@ public sealed class StorageIsolationTests
         Assert.Equal(Path.Combine(layout.ApplicationDataDirectory, "transactions"), layout.TransactionDirectory);
         Assert.Equal(Path.Combine(layout.ApplicationDataDirectory, "VSCodeData"), layout.VsCodeUserDataDirectory);
         Assert.Equal(Path.Combine(layout.ApplicationDataDirectory, "VSCodeExtensions"), layout.VsCodeExtensionsDirectory);
+        Assert.Equal(Path.Combine(layout.UserProfile, ".vscode", "extensions"), layout.VsCodeSharedExtensionsDirectory);
         Assert.Equal(Path.Combine(layout.ApplicationDataDirectory, "VSCodeSharedData"), layout.VsCodeSharedDataDirectory);
     }
 

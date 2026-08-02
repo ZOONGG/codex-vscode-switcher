@@ -471,8 +471,17 @@ internal sealed class SettingsWindow : Window
         stack.Children.Add(Card(
             SettingCheck(localizer["AutomaticVsCodeDetection"], localizer["AutomaticVsCodeDetectionHelp"], settings.AutomaticallyDetectVsCode, value => settings.AutomaticallyDetectVsCode = value),
             PathInput(localizer["VsCodeExecutable"], localizer["VsCodeExecutableHelp"], settings.CustomVsCodeExecutablePath, value => settings.CustomVsCodeExecutablePath = value),
+            SettingCheck(
+                localizer["UseExistingVsCodeExtensions"],
+                localizer["UseExistingVsCodeExtensionsHelp"],
+                settings.UseExistingVsCodeExtensions,
+                value => settings.UseExistingVsCodeExtensions = value,
+                afterSave: Rebuild),
             ReadOnlyPath(localizer["VsCodeUserData"], localizer["VsCodeUserDataHelp"], settings.DedicatedVsCodeUserDataDirectory),
-            ReadOnlyPath(localizer["VsCodeExtensions"], localizer["VsCodeExtensionsHelp"], settings.DedicatedVsCodeExtensionsDirectory),
+            ReadOnlyPath(
+                localizer["VsCodeExtensions"],
+                localizer["VsCodeExtensionsHelp"],
+                snapshot.ExtensionsDirectory ?? settings.DedicatedVsCodeExtensionsDirectory),
             ReadOnlyPath(localizer["VsCodeSharedData"], localizer["VsCodeSharedDataHelp"], settings.DedicatedVsCodeSharedDataDirectory),
             ReadOnlyPath(localizer["CodexProfileRoot"], localizer["CodexProfileRootHelp"], settings.CodexProfileRoot),
             PathInput(localizer["LastWorkspace"], localizer["LastWorkspaceHelp"], settings.LastOpenedWorkspace, value => settings.LastOpenedWorkspace = value),
@@ -1080,11 +1089,17 @@ internal sealed class SettingsWindow : Window
         return $"{value:0.##} {units[unit]}";
     }
 
-    private UIElement SettingCheck(string title, string subtitle, bool value, Action<bool> setter, bool enabled = true)
+    private UIElement SettingCheck(
+        string title,
+        string subtitle,
+        bool value,
+        Action<bool> setter,
+        bool enabled = true,
+        Action? afterSave = null)
     {
         var check = new CheckBox { IsChecked = value, HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = enabled };
-        check.Checked += (_, _) => { setter(true); Save(); };
-        check.Unchecked += (_, _) => { setter(false); Save(); };
+        check.Checked += (_, _) => { setter(true); Save(); afterSave?.Invoke(); };
+        check.Unchecked += (_, _) => { setter(false); Save(); afterSave?.Invoke(); };
         return SettingRow(title, subtitle, check);
     }
 

@@ -12,7 +12,8 @@ public sealed class VsCodeLaunchPlanBuilder
         string extensionsDirectory,
         string sharedDataDirectory,
         string profileCodexHome,
-        string? workspacePath)
+        string? workspacePath,
+        VsCodeExtensionMode extensionMode = VsCodeExtensionMode.Isolated)
     {
         string executable = RequireFullPath(executablePath, nameof(executablePath));
         string userData = RequireFullPath(userDataDirectory, nameof(userDataDirectory));
@@ -27,12 +28,15 @@ public sealed class VsCodeLaunchPlanBuilder
         {
             "--user-data-dir",
             userData,
-            "--extensions-dir",
-            extensions,
             "--shared-data-dir",
             sharedData,
             "--new-window",
         };
+        if (extensionMode == VsCodeExtensionMode.Isolated)
+        {
+            arguments.Insert(2, "--extensions-dir");
+            arguments.Insert(3, extensions);
+        }
         if (workspace is not null)
         {
             arguments.Add(workspace);
