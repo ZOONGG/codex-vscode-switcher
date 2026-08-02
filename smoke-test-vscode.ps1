@@ -13,12 +13,57 @@ $source = @"
 using System;
 using System.Runtime.InteropServices;
 public static class CodexVsCodeSmokeNative {
+    private const int SW_RESTORE = 9;
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool SetForegroundWindow(IntPtr hWnd);
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
+
+    public static bool FocusWindow(IntPtr hWnd) {
+        IntPtr foreground = GetForegroundWindow();
+        uint currentThread = GetCurrentThreadId();
+        uint foregroundThread = GetWindowThreadProcessId(foreground, out _);
+        uint targetThread = GetWindowThreadProcessId(hWnd, out _);
+        bool attachedForeground = foregroundThread != 0 && foregroundThread != currentThread
+            && AttachThreadInput(currentThread, foregroundThread, true);
+        bool attachedTarget = targetThread != 0 && targetThread != currentThread
+            && targetThread != foregroundThread && AttachThreadInput(currentThread, targetThread, true);
+
+        try {
+            ShowWindowAsync(hWnd, SW_RESTORE);
+            BringWindowToTop(hWnd);
+            return SetForegroundWindow(hWnd);
+        }
+        finally {
+            if (attachedTarget) {
+                AttachThreadInput(currentThread, targetThread, false);
+            }
+            if (attachedForeground) {
+                AttachThreadInput(currentThread, foregroundThread, false);
+            }
+        }
+    }
 }
 "@
 Add-Type -TypeDefinition $source
@@ -96,6 +141,26 @@ function Close-ExactManagedWindow {
     throw "The exact matching VS Code processes did not exit after the graceful close request."
 }
 
+function Set-ExactManagedWindowForeground {
+    param([long]$WindowHandle)
+
+    [IntPtr]$handle = [IntPtr]$WindowHandle
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(5)
+    $focusRequested = $false
+    while ([DateTimeOffset]::UtcNow -lt $deadline) {
+        $focusRequested = [CodexVsCodeSmokeNative]::FocusWindow($handle) -or $focusRequested
+        Start-Sleep -Milliseconds 100
+        if ([CodexVsCodeSmokeNative]::GetForegroundWindow() -eq $handle) {
+            return [pscustomobject]@{
+                Requested = $focusRequested
+                Verified = $true
+            }
+        }
+    }
+
+    throw "The exact matching VS Code window could not be verified as foreground."
+}
+
 $ordinaryBefore = @(Get-CimInstance Win32_Process -Filter "Name = 'Code.exe'" | Select-Object -ExpandProperty ProcessId)
 $results = @()
 try {
@@ -121,10 +186,7 @@ try {
         }
 
         $window = Wait-ForExactWindow -RootProcessId $root.Id
-        [IntPtr]$handle = [IntPtr]$window.WindowHandle
-        $focusRequested = [CodexVsCodeSmokeNative]::SetForegroundWindow($handle)
-        Start-Sleep -Milliseconds 250
-        $focused = [CodexVsCodeSmokeNative]::GetForegroundWindow() -eq $handle
+        $focus = Set-ExactManagedWindowForeground -WindowHandle $window.WindowHandle
         Close-ExactManagedWindow -WindowHandle $window.WindowHandle
         $results += [pscustomobject]@{
             Iteration = $iteration
@@ -133,18 +195,24 @@ try {
             LauncherHandoff = $window.RootProcessId -ne $window.WindowProcessId
             WindowHandle = $window.WindowHandle
             ExactArgumentOwnership = $true
-            FocusRequested = $focusRequested
-            FocusVerified = $focused
+            FocusRequested = $focus.Requested
+            FocusVerified = $focus.Verified
             GracefulCloseVerified = $true
         }
     }
 
     $ordinaryAfter = @(Get-CimInstance Win32_Process -Filter "Name = 'Code.exe'" | Select-Object -ExpandProperty ProcessId)
+    $ordinaryDifference = @(Compare-Object -ReferenceObject $ordinaryBefore -DifferenceObject $ordinaryAfter)
+    if ($ordinaryDifference.Count -ne 0) {
+        throw "The ordinary VS Code process set changed during the isolated smoke test."
+    }
+
     [pscustomobject]@{
         ExecutablePath = $executable
         TemporaryRoot = $temporaryRoot
         OrdinaryProcessIdsBefore = $ordinaryBefore
         OrdinaryProcessIdsAfter = $ordinaryAfter
+        OrdinaryProcessesUntouched = $true
         Iterations = $results
     } | ConvertTo-Json -Depth 5
 }
