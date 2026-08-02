@@ -46,6 +46,11 @@ internal sealed class SettingsWindow : Window
     private readonly Action importVsCodeSetup;
     private readonly Action createCodexVsCodeShortcut;
     private readonly Action copyDiagnostics;
+    private readonly Action testCodexConnection;
+    private readonly Action openCodexLogs;
+    private readonly Action resetNetworkingCache;
+    private readonly Action compareVsCodeEnvironments;
+    private readonly Action restartCodexExtensionHost;
     private readonly Action resetManagedRuntimeState;
     private readonly Action exitApplication;
     private readonly Localizer localizer;
@@ -95,6 +100,11 @@ internal sealed class SettingsWindow : Window
         Action importVsCodeSetup,
         Action createCodexVsCodeShortcut,
         Action copyDiagnostics,
+        Action testCodexConnection,
+        Action openCodexLogs,
+        Action resetNetworkingCache,
+        Action compareVsCodeEnvironments,
+        Action restartCodexExtensionHost,
         Action resetManagedRuntimeState,
         Action exitApplication)
     {
@@ -129,6 +139,11 @@ internal sealed class SettingsWindow : Window
         this.importVsCodeSetup = importVsCodeSetup;
         this.createCodexVsCodeShortcut = createCodexVsCodeShortcut;
         this.copyDiagnostics = copyDiagnostics;
+        this.testCodexConnection = testCodexConnection;
+        this.openCodexLogs = openCodexLogs;
+        this.resetNetworkingCache = resetNetworkingCache;
+        this.compareVsCodeEnvironments = compareVsCodeEnvironments;
+        this.restartCodexExtensionHost = restartCodexExtensionHost;
         this.resetManagedRuntimeState = resetManagedRuntimeState;
         this.exitApplication = exitApplication;
 
@@ -531,8 +546,13 @@ internal sealed class SettingsWindow : Window
         stack.Children.Add(Card(
             SectionHeader(localizer["Diagnostics"], localizer["DiagnosticsHelp"]),
             CommandGrid(
+                (localizer["TestCodexConnection"], "M 4 12 A 8 8 0 0 1 20 12 M 7 12 A 5 5 0 0 1 17 12 M 10 12 A 2 2 0 0 1 14 12 M 12 17 L 12 20", testCodexConnection, true),
+                (localizer["RestartCodexExtensionHost"], "M 19 8 A 8 8 0 1 0 20 14 M 19 8 L 19 3 M 19 8 L 14 8", restartCodexExtensionHost, false),
+                (localizer["OpenCodexLogs"], "M 3 7 L 9 7 L 11 9 L 21 9 L 21 19 L 3 19 Z", openCodexLogs, false),
                 (localizer["OpenLogsFolder"], "M 3 7 L 9 7 L 11 9 L 21 9 L 21 19 L 3 19 Z", openLogsFolder, false),
                 (localizer["CopyDiagnostics"], "M 8 4 L 20 4 L 20 18 L 8 18 Z M 4 8 L 4 22 L 16 22", copyDiagnostics, false),
+                (localizer["CompareVsCodeEnvironments"], "M 5 4 L 5 20 M 19 4 L 19 20 M 8 8 L 16 8 M 8 16 L 16 16", compareVsCodeEnvironments, false),
+                (localizer["ResetNetworkingCache"], "M 5 5 L 19 5 L 19 19 L 5 19 Z M 8 8 L 16 16 M 16 8 L 8 16", resetNetworkingCache, false),
                 (localizer["ResetManagedRuntimeState"], "M 5 5 L 19 5 L 19 19 L 5 19 Z M 8 8 L 16 16 M 16 8 L 8 16", resetManagedRuntimeState, false))));
         return stack;
     }

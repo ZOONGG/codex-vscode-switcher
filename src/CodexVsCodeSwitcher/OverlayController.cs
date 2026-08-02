@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.IO;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
@@ -26,6 +28,9 @@ internal sealed class OverlayController : IDisposable
     private readonly MinimalBackupService backupMaintenance;
     private readonly VsCodeSetupImportService setupImportService;
     private readonly VsCodeProxySettingsService proxySettingsService;
+    private readonly CodexExtensionInstallationLocator extensionInstallationLocator;
+    private readonly CodexNetworkDiagnosticService networkDiagnosticService;
+    private readonly VsCodeEnvironmentComparisonService environmentComparisonService;
     private readonly ProfileStatusService statusService;
     private readonly DispatcherTimer windowTrackingTimer;
     private readonly CancellationTokenSource disposalTokenSource = new();
@@ -80,6 +85,9 @@ internal sealed class OverlayController : IDisposable
         this.backupMaintenance = backupMaintenance;
         this.setupImportService = setupImportService;
         proxySettingsService = new VsCodeProxySettingsService(protectedPaths);
+        extensionInstallationLocator = new CodexExtensionInstallationLocator(protectedPaths);
+        networkDiagnosticService = new CodexNetworkDiagnosticService(new SystemNetworkDiagnosticProbe());
+        environmentComparisonService = new VsCodeEnvironmentComparisonService(protectedPaths);
         settings = settingsService.Load();
         localizer = new Localizer(settings.Language);
         App.ApplyTheme(settings.Theme);
@@ -527,6 +535,11 @@ internal sealed class OverlayController : IDisposable
             () => _ = ImportVsCodeSetupAsync(),
             CreateCodexVsCodeShortcut,
             CopyLastDiagnostics,
+            () => _ = RunNetworkDiagnosticsAsync(),
+            OpenCodexLogs,
+            ResetNetworkingCache,
+            CompareVsCodeEnvironments,
+            RestartCodexExtensionHost,
             ResetManagedRuntimeState,
             () => Application.Current.Shutdown());
         settingsWindow.Closed += (_, _) =>
@@ -1052,6 +1065,311 @@ internal sealed class OverlayController : IDisposable
             logger.Error("Safe proxy settings copy failed.", exception);
             ShowIntegrationError("SafeProxySettingsCopyFailed");
         }
+    }
+
+    private async Task RunNetworkDiagnosticsAsync()
+    {
+        string temporaryCodexHome = Path.Combine(
+            Path.GetTempPath(),
+            "CodexVsCodeSwitcher-Network-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(temporaryCodexHome);
+            CodexExtensionInstallationInfo? extension =
+                extensionInstallationLocator.Locate(SelectedExtensionsDirectory);
+            IReadOnlyDictionary<string, string> environmentOverrides;
+            try
+            {
+                environmentOverrides = ManagedEnvironmentOverridesBuilder.Build(
+                    temporaryCodexHome,
+                    settings.CustomCaEnvironmentVariable,
+                    settings.CustomCaCertificatePath);
+            }
+            catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException)
+            {
+                environmentOverrides = ManagedEnvironmentOverridesBuilder.Build(
+                    temporaryCodexHome,
+                    CustomCaEnvironmentVariable.None,
+                    null);
+            }
+
+            var context = new CodexNetworkDiagnosticContext(
+                CodexNetworkDiagnosticService.DefaultHttpsEndpoint,
+                CodexNetworkDiagnosticService.DefaultWebSocketEndpoint,
+                SelectedExtensionMode,
+                SelectedExtensionsDirectory,
+                extension?.ExtensionPath,
+                extension?.BackendExecutablePath,
+                settings.CustomCaEnvironmentVariable,
+                settings.CustomCaCertificatePath,
+                environmentOverrides,
+                CollectManagedProcessPaths());
+            CodexNetworkDiagnosticReport report = await networkDiagnosticService.RunAsync(
+                context,
+                disposalTokenSource.Token).ConfigureAwait(true);
+            string formatted = CodexNetworkDiagnosticFormatter.Format(report, localizer.Language);
+            WriteNetworkDiagnosticCache(formatted);
+            var window = new DiagnosticReportWindow(
+                localizer["NetworkDiagnosticsTitle"],
+                formatted,
+                localizer)
+            {
+                Owner = settingsWindow,
+            };
+            window.ShowDialog();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException)
+        {
+            logger.Error("Codex network diagnostics failed.", exception);
+            ShowIntegrationError("NetworkDiagnosticsFailed");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(temporaryCodexHome)
+                    && !Directory.EnumerateFileSystemEntries(temporaryCodexHome).Any())
+                {
+                    Directory.Delete(temporaryCodexHome, recursive: false);
+                }
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+
+    private void OpenCodexLogs()
+    {
+        string root = Path.Combine(settings.DedicatedVsCodeUserDataDirectory, "logs");
+        protectedPaths.AssertCanRead(root);
+        string? log = Directory.Exists(root)
+            ? Directory.EnumerateFiles(root, "Codex.log", SearchOption.AllDirectories)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault()
+            : null;
+        if (log is null)
+        {
+            ShowIntegrationNotice("CodexLogsNotFound");
+            return;
+        }
+
+        _ = Process.Start(new ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            ArgumentList = { "/select,", Path.GetFullPath(log) },
+            UseShellExecute = true,
+        });
+    }
+
+    private void WriteNetworkDiagnosticCache(string report)
+    {
+        string cache = NetworkDiagnosticCacheFile;
+        protectedPaths.AssertCanWrite(cache);
+        Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
+        File.WriteAllText(cache, report, new System.Text.UTF8Encoding(false));
+    }
+
+    private void ResetNetworkingCache()
+    {
+        string cache = NetworkDiagnosticCacheFile;
+        protectedPaths.AssertCanWrite(cache);
+        if (File.Exists(cache))
+        {
+            File.Delete(cache);
+        }
+
+        ShowIntegrationNotice("NetworkingCacheReset");
+    }
+
+    private void CompareVsCodeEnvironments()
+    {
+        string? executable = executableLocator.Locate(settings.CustomVsCodeExecutablePath);
+        if (executable is null)
+        {
+            ShowIntegrationError("VsCodeExecutableMissing");
+            return;
+        }
+
+        try
+        {
+            string ordinaryUserData = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Code");
+            VsCodeEnvironmentComparison comparison = environmentComparisonService.Build(
+                executable,
+                ordinaryUserData,
+                settings.DedicatedVsCodeUserDataDirectory,
+                paths.VsCodeSharedExtensionsDirectory,
+                SelectedExtensionsDirectory,
+                SelectedExtensionMode);
+            var window = new DiagnosticReportWindow(
+                localizer["CompareVsCodeEnvironments"],
+                VsCodeEnvironmentComparisonFormatter.Format(comparison, localizer.Language),
+                localizer)
+            {
+                Owner = settingsWindow,
+            };
+            window.ShowDialog();
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException)
+        {
+            logger.Error("Safe VS Code environment comparison failed.", exception);
+            ShowIntegrationError("EnvironmentComparisonFailed");
+        }
+    }
+
+    private void RestartCodexExtensionHost()
+    {
+        ManagedVsCodeInstanceState? state = managedInstanceStore.Read();
+        if (state is null || managedRuntime.Observe(state) is null)
+        {
+            ShowIntegrationError("ManagedVsCodeNotRunning");
+            return;
+        }
+
+        ProfileInfo? profile = profiles.FirstOrDefault(item =>
+            item.Name.Equals(state.SelectedProfileId, StringComparison.OrdinalIgnoreCase));
+        if (profile is null)
+        {
+            ShowIntegrationError("ProfileInvalid");
+            return;
+        }
+
+        try
+        {
+            VsCodeProcessStartSpec plan = launchPlanBuilder.BuildExtensionHostRestart(
+                state.ExecutablePath,
+                state.UserDataDirectory,
+                state.ExtensionsDirectory,
+                state.SharedDataDirectory,
+                profile.DirectoryPath,
+                state.ExtensionMode,
+                settings.CustomCaEnvironmentVariable,
+                settings.CustomCaCertificatePath);
+            _ = managedRuntime.Launch(plan);
+            ShowIntegrationNotice("CodexExtensionHostRestartRequested");
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException
+                or Win32Exception)
+        {
+            logger.Error("Codex extension host restart request failed.", exception);
+            ShowIntegrationError("CodexExtensionHostRestartFailed");
+        }
+    }
+
+    private string NetworkDiagnosticCacheFile
+        => Path.Combine(paths.ApplicationDataDirectory, "network-diagnostics-cache.txt");
+
+    private IReadOnlyList<BackendProcessPathDiagnostic> CollectManagedProcessPaths()
+    {
+        ManagedVsCodeInstanceState? state = managedInstanceStore.Read();
+        if (state is null || managedRuntime.Observe(state) is null)
+        {
+            return [];
+        }
+
+        IReadOnlyDictionary<int, int> parents = SnapshotParentProcesses();
+        var descendants = new HashSet<int> { state.RootProcessId };
+        bool added;
+        do
+        {
+            added = false;
+            foreach ((int processId, int parentId) in parents)
+            {
+                if (descendants.Contains(parentId) && descendants.Add(processId))
+                {
+                    added = true;
+                }
+            }
+        }
+        while (added);
+
+        var result = new List<BackendProcessPathDiagnostic>();
+        foreach (int processId in descendants.Order())
+        {
+            try
+            {
+                using Process process = Process.GetProcessById(processId);
+                string? executable = process.MainModule?.FileName;
+                if (executable is null)
+                {
+                    continue;
+                }
+
+                string fullPath = Path.GetFullPath(executable);
+                string? extensionDirectory = fullPath.StartsWith(
+                    Path.TrimEndingDirectorySeparator(SelectedExtensionsDirectory)
+                        + Path.DirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase)
+                    ? SelectedExtensionsDirectory
+                    : null;
+                result.Add(new BackendProcessPathDiagnostic(
+                    process.ProcessName,
+                    fullPath,
+                    parents.GetValueOrDefault(processId),
+                    new DateTimeOffset(process.StartTime.ToUniversalTime(), TimeSpan.Zero),
+                    extensionDirectory));
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException
+                    or InvalidOperationException
+                    or Win32Exception)
+            {
+            }
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyDictionary<int, int> SnapshotParentProcesses()
+    {
+        var result = new Dictionary<int, int>();
+        IntPtr snapshot = NativeMethods.CreateToolhelp32Snapshot(NativeMethods.Th32csSnapProcess, 0);
+        if (snapshot == NativeMethods.InvalidHandleValue)
+        {
+            return result;
+        }
+
+        try
+        {
+            var entry = new ProcessEntry32
+            {
+                Size = (uint)Marshal.SizeOf<ProcessEntry32>(),
+            };
+            if (!NativeMethods.Process32First(snapshot, ref entry))
+            {
+                return result;
+            }
+
+            do
+            {
+                result[(int)entry.ProcessId] = (int)entry.ParentProcessId;
+                entry.Size = (uint)Marshal.SizeOf<ProcessEntry32>();
+            }
+            while (NativeMethods.Process32Next(snapshot, ref entry));
+        }
+        finally
+        {
+            _ = NativeMethods.CloseHandle(snapshot);
+        }
+
+        return result;
     }
 
     private void CopyLastDiagnostics()
