@@ -39,6 +39,8 @@ Normal switching uses `WM_CLOSE` and waits for VS Code to resolve unsaved work. 
 
 Shared extension mode is default and read-only. The official Codex extension is installed only after explicit user action in isolated mode and only into the dedicated extension directory.
 
+The project-owned companion is loaded only through the verified managed launch. Bridge messages are local, bounded, session-scoped, traversal-checked, protected-path-checked, and restricted to workspace/UI metadata. No network port is used.
+
 Network reports never include environment values, proxy credentials, authorization headers, cookies, command lines, or certificate contents. Optional custom CA configuration validates and passes a path only; TLS verification remains enabled. Proxy copying is allowlisted to `http.proxy`, `http.proxyStrictSSL`, and `http.proxySupport`, rejects embedded credentials, and requires confirmation.
 
 Optional customization import uses an allowlist and explicit preview/confirmation. It excludes global/workspace storage, SQLite databases, credentials, sessions, cookies, machine identifiers, logs, and temporary files.

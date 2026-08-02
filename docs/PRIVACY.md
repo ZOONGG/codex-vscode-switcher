@@ -7,3 +7,5 @@ Non-secret application data and sanitized logs stay under `%LOCALAPPDATA%\CodexV
 Codex VS Code always uses dedicated user-data and shared-data directories. By default only ordinary extension installation files are shared; accounts, settings, globalStorage, workspaceStorage, login state, cookies, databases, and profile state are not. Advanced mode uses a dedicated extensions directory. Optional setup import copies only confirmed editor settings, keybindings, snippets, named-profile preferences, and selected extension identifiers into dedicated storage; it excludes account and storage databases.
 
 The application does not display or log authentication contents. The main `.codex` directory and original application data are protected from reads used for copying and from all mutations.
+
+The bundled dedicated-only companion writes sanitized workspace paths and UI result flags to an atomic local JSON bridge. It never sends file contents, source code, chats, terminal output, cookies, credentials, or environment-variable values, and it exposes no network listener.

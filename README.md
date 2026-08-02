@@ -93,7 +93,11 @@ extension-host restart, and a reset limited to the switcher's diagnostic cache.
 
 The dedicated `User\settings.json` is updated atomically while preserving unrelated valid settings. `chatgpt.openOnStartup` is configured only there.
 
-The switcher supports a folder, a `.code-workspace` file, or an empty window. A missing remembered workspace is reported without silently erasing it.
+The switcher bundles a lightweight companion extension only for the dedicated Codex VS Code launch. It receives an application-owned bridge path through process-local environment variables, reports only sanitized workspace/UI state through atomic JSON under `%LOCALAPPDATA%\CodexVsCodeSwitcher\bridge`, and never opens a network port. Ordinary VS Code is not installed or launched with this companion.
+
+Opening a folder or `.code-workspace` inside Codex VS Code automatically updates one global current project shared by all Codex account profiles. The current project reopens after profile switches and restarts. Up to ten deduplicated recent projects are available in Settings and the tray; missing projects remain visible until the user chooses another folder, opens an empty window, or removes the entry.
+
+After a verified managed window appears, the companion activates the official extension and invokes `chatgpt.openSidebar` with bounded retries. **Open Codex automatically** is enabled by default. `Ctrl+Alt+C` and the compact status-bar item **Codex** reopen and focus the sidebar; an existing dedicated keybinding is reported and left unchanged.
 
 **Import my VS Code setup** is optional and confirmation-only. Its preview lists the allowed settings, keybindings, snippets, named-profile files, and extension count. It never copies storage databases, sessions, credentials, cookies, machine identifiers, logs, or temporary files. Chosen extension IDs are installed separately into the dedicated extensions directory.
 
@@ -105,10 +109,12 @@ Requirements: Windows 10/11 x64, PowerShell, and .NET 8 SDK. A repository-local 
 
 ```powershell
 .\test.ps1
+.\build-companion.ps1
 .\build.ps1
 .\verify-repository-safety.ps1
 .\publish.ps1
 .\publish.ps1 -ArtifactLabel real-e2e-test
+.\smoke-test-workspace-restore.ps1
 ```
 
 Published files:

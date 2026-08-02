@@ -4,6 +4,8 @@
 
 ### Added
 
+- Bundled `ZOONGG.codex-vscode-switcher-companion` extension for sanitized active-workspace tracking, automatic `chatgpt.openSidebar` invocation, a conflict-safe `Ctrl+Alt+C` entry point, and a compact `Codex` status-bar action.
+- Global current-project restoration across account switches, a deduplicated ten-item recent-project list, first-launch project chooser, and explicit missing-project recovery actions.
 - Shared ordinary VS Code extension installation files as the default, with an optional isolated extensions mode.
 - Sanitized DNS/TCP/TLS/HTTPS/WebSocket/backend diagnostics, safe VS Code environment comparison, process-path reporting, and networking recovery actions.
 - Confirmation-only allowlist proxy settings copy and path-only custom CA environment configuration.

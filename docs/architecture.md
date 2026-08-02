@@ -5,6 +5,7 @@
 - `CodexVsCodeSwitcher.Core`: launch plans, profile/workspace validation, switch transaction, rollback, managed metadata, extension management, protected paths, and testable visibility/identity policies.
 - `CodexVsCodeSwitcher`: WPF shell, tray lifecycle, exact process launch, process-tree/window verification, Win32 event hooks, settings, and localization.
 - `CodexVsCodeSwitcher.Tests`: fake profiles, fake processes/windows, fake launchers, temporary extension directories, and isolation regressions.
+- `CodexVsCodeSwitcher.Companion`: bundled local VS Code extension for workspace observation and supported Codex commands.
 
 ## Trust boundaries
 
@@ -21,6 +22,14 @@ The production controller uses the unavailable usage provider, so status UI rema
 Every launch supplies the exact dedicated `--user-data-dir`, `--shared-data-dir`, and `--new-window`. Shared extension mode is the default and omits `--extensions-dir`, so both VS Code environments execute the same installed Codex backend path. Isolated mode supplies the exact dedicated `--extensions-dir`. Workspace input is either an existing folder, an existing `.code-workspace`, or null.
 
 `ProcessStartInfo` retains the complete parent environment and applies only process-local application overrides. `CODEX_HOME` is always overridden. An explicitly configured existing CA path may additionally override only `CODEX_CA_CERTIFICATE` or `SSL_CERT_FILE`; values are never logged and no global environment is changed.
+
+Managed launches also pass an application-owned `--extensionDevelopmentPath` and four process-local `CODEX_VSCODE_SWITCHER_*` values: bridge directory, random session ID, automatic-open flag, and dedicated user-data path. These values are absent from ordinary VS Code launches.
+
+## Workspace bridge
+
+The companion observes `workspaceFolders` and `workspaceFile` at activation and after folder changes or window reload. It writes one bounded JSON message atomically under the dedicated bridge directory. The schema contains workspace type/path/folder paths, generated installation-scoped window ID, timestamp, official-extension presence, sidebar result, and shortcut-conflict boolean. It contains no source/file/chat/terminal contents, credentials, cookies, or process environment snapshot.
+
+The desktop validates protocol/session, timestamp bounds, traversal, absolute path shape, protected roots, workspace type, `.code-workspace` suffix, and existence before atomically storing the current project. Temporary empty startup reports never erase a valid project. The history is global across account profiles, deduplicated case-insensitively, and capped at ten.
 
 ## Managed identity
 
@@ -47,3 +56,5 @@ If the new launch fails after a previous managed instance closed, one rollback l
 Network diagnostics use credential-free probes for DNS, TCP 443, TLS, HTTPS, secure WebSocket capability, system proxy detection, custom CA availability, and `codex.exe --version`. HTTP 401/403 proves network reachability and is reported as authentication after successful networking. Reports contain only allowlisted paths, hashes, process parentage/start times, setting names, environment variable names, and sanitized errors.
 
 Dedicated VS Code settings are parsed with JSONC-compatible comments/trailing commas, updated atomically, and preserve unrelated keys.
+
+The companion waits for `openai.chatgpt` activation and invokes `chatgpt.openSidebar` with 750 ms bounded retries for up to 20 seconds. Sidebar failure is reported independently and never rolls back a successful profile switch. `Ctrl+Alt+C` is a default extension contribution, so user keybindings retain priority; the dedicated keybindings file is inspected only to report a conflict. The status-bar action invokes the same official command.
