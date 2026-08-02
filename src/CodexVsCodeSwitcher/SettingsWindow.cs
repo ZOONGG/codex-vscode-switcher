@@ -37,6 +37,7 @@ internal sealed class SettingsWindow : Window
     private readonly Action launchManagedVsCode;
     private readonly Action restartManagedVsCode;
     private readonly Action installCodexExtension;
+    private readonly Action copySafeProxySettings;
     private readonly Action selectWorkspaceFolder;
     private readonly Action selectWorkspaceFile;
     private readonly Action launchEmptyWorkspace;
@@ -85,6 +86,7 @@ internal sealed class SettingsWindow : Window
         Action launchManagedVsCode,
         Action restartManagedVsCode,
         Action installCodexExtension,
+        Action copySafeProxySettings,
         Action selectWorkspaceFolder,
         Action selectWorkspaceFile,
         Action launchEmptyWorkspace,
@@ -118,6 +120,7 @@ internal sealed class SettingsWindow : Window
         this.launchManagedVsCode = launchManagedVsCode;
         this.restartManagedVsCode = restartManagedVsCode;
         this.installCodexExtension = installCodexExtension;
+        this.copySafeProxySettings = copySafeProxySettings;
         this.selectWorkspaceFolder = selectWorkspaceFolder;
         this.selectWorkspaceFile = selectWorkspaceFile;
         this.launchEmptyWorkspace = launchEmptyWorkspace;
@@ -484,6 +487,16 @@ internal sealed class SettingsWindow : Window
                 snapshot.ExtensionsDirectory ?? settings.DedicatedVsCodeExtensionsDirectory),
             ReadOnlyPath(localizer["VsCodeSharedData"], localizer["VsCodeSharedDataHelp"], settings.DedicatedVsCodeSharedDataDirectory),
             ReadOnlyPath(localizer["CodexProfileRoot"], localizer["CodexProfileRootHelp"], settings.CodexProfileRoot),
+            EnumCombo(
+                localizer["CustomCaMode"],
+                localizer["CustomCaModeHelp"],
+                settings.CustomCaEnvironmentVariable,
+                value => settings.CustomCaEnvironmentVariable = value),
+            PathInput(
+                localizer["CustomCaCertificatePath"],
+                localizer["CustomCaCertificatePathHelp"],
+                settings.CustomCaCertificatePath,
+                value => settings.CustomCaCertificatePath = value),
             PathInput(localizer["LastWorkspace"], localizer["LastWorkspaceHelp"], settings.LastOpenedWorkspace, value => settings.LastOpenedWorkspace = value),
             SettingCheck(localizer["ReopenLastWorkspace"], localizer["ReopenLastWorkspaceHelp"], settings.ReopenLastWorkspaceAfterSwitch, value => settings.ReopenLastWorkspaceAfterSwitch = value),
             SettingCheck(localizer["LaunchCodexSidebar"], localizer["LaunchCodexSidebarHelp"], settings.LaunchCodexSidebarOnStartup, value => settings.LaunchCodexSidebarOnStartup = value),
@@ -510,6 +523,7 @@ internal sealed class SettingsWindow : Window
             (localizer["LaunchManagedVsCode"], "M 7 5 L 19 12 L 7 19 Z", launchManagedVsCode, true),
             (localizer["RestartManagedVsCode"], "M 19 8 A 8 8 0 1 0 20 14 M 19 8 L 19 3 M 19 8 L 14 8", restartManagedVsCode, false),
             (localizer["InstallCodexExtension"], "M 12 3 L 12 16 M 7 11 L 12 16 L 17 11 M 5 20 L 19 20", installCodexExtension, false),
+            (localizer["CopySafeProxySettings"], "M 4 7 L 20 7 M 7 4 L 4 7 L 7 10 M 20 17 L 4 17 M 17 14 L 20 17 L 17 20", copySafeProxySettings, false),
             (localizer["ImportVsCodeSetup"], "M 4 5 L 20 5 L 20 19 L 4 19 Z M 12 2 L 12 14 M 8 10 L 12 14 L 16 10", importVsCodeSetup, false),
             (localizer["CreateCodexVsCodeShortcut"], "M 6 3 L 18 3 L 18 21 L 6 21 Z M 9 7 L 15 7 M 9 11 L 15 11", createCodexVsCodeShortcut, false),
             (localizer["OpenDedicatedVsCodeData"], "M 3 7 L 9 7 L 11 9 L 21 9 L 21 19 L 3 19 Z", openDedicatedVsCodeData, false),
@@ -1603,6 +1617,9 @@ internal sealed class SettingsWindow : Window
             OverlayDisplayMode.Expanded => localizer["Expanded"],
             OverlayOrientation.Horizontal => localizer["Horizontal"],
             OverlayOrientation.Vertical => localizer["Vertical"],
+            CustomCaEnvironmentVariable.None => localizer["CustomCaNone"],
+            CustomCaEnvironmentVariable.CodexCaCertificate => "CODEX_CA_CERTIFICATE",
+            CustomCaEnvironmentVariable.SslCertFile => "SSL_CERT_FILE",
             _ => value.ToString(),
         };
     }

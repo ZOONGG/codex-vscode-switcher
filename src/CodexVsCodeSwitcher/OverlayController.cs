@@ -25,6 +25,7 @@ internal sealed class OverlayController : IDisposable
     private readonly SafeLogger logger;
     private readonly MinimalBackupService backupMaintenance;
     private readonly VsCodeSetupImportService setupImportService;
+    private readonly VsCodeProxySettingsService proxySettingsService;
     private readonly ProfileStatusService statusService;
     private readonly DispatcherTimer windowTrackingTimer;
     private readonly CancellationTokenSource disposalTokenSource = new();
@@ -78,6 +79,7 @@ internal sealed class OverlayController : IDisposable
         this.logger = logger;
         this.backupMaintenance = backupMaintenance;
         this.setupImportService = setupImportService;
+        proxySettingsService = new VsCodeProxySettingsService(protectedPaths);
         settings = settingsService.Load();
         localizer = new Localizer(settings.Language);
         App.ApplyTheme(settings.Theme);
@@ -235,6 +237,8 @@ internal sealed class OverlayController : IDisposable
                     requireExtension: true,
                     openCodexOnStartup: settings.LaunchCodexSidebarOnStartup,
                     extensionMode: SelectedExtensionMode,
+                    customCaVariable: settings.CustomCaEnvironmentVariable,
+                    customCaCertificatePath: settings.CustomCaCertificatePath,
                     progress: new Progress<string>(
                         key => overlayWindow?.SetSwitchingStatus(localizer[key])),
                     cancellationToken: disposalTokenSource.Token)
@@ -514,6 +518,7 @@ internal sealed class OverlayController : IDisposable
             LaunchManagedVsCode,
             RestartManagedVsCode,
             () => _ = InstallCodexExtensionAsync(),
+            CopySafeProxySettings,
             SelectWorkspaceFolder,
             SelectWorkspaceFile,
             ClearWorkspaceForNextLaunch,
@@ -1004,6 +1009,48 @@ internal sealed class OverlayController : IDisposable
         {
             logger.Error("Could not create the Codex VS Code shortcut.", exception);
             ShowIntegrationError("CodexVsCodeShortcutFailed");
+        }
+    }
+
+    private void CopySafeProxySettings()
+    {
+        try
+        {
+            string ordinarySettings = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Code",
+                "User",
+                "settings.json");
+            VsCodeProxySettingsPlan plan = proxySettingsService.BuildPlan(ordinarySettings);
+            if (plan.SettingNames.Count == 0)
+            {
+                ShowIntegrationNotice("NoSafeProxySettingsFound");
+                return;
+            }
+
+            string names = string.Join(Environment.NewLine, plan.SettingNames.Select(name => $"• {name}"));
+            if (!ConfirmDialog.Show(
+                settingsWindow,
+                IntPtr.Zero,
+                localizer["CopySafeProxySettings"],
+                localizer.Format("CopySafeProxySettingsPreview", names),
+                localizer["Copy"],
+                localizer["Cancel"]))
+            {
+                return;
+            }
+
+            proxySettingsService.Apply(settings.DedicatedVsCodeUserDataDirectory, plan);
+            ShowIntegrationNotice("SafeProxySettingsCopied");
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException)
+        {
+            logger.Error("Safe proxy settings copy failed.", exception);
+            ShowIntegrationError("SafeProxySettingsCopyFailed");
         }
     }
 

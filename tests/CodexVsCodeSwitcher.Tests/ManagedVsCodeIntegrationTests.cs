@@ -793,6 +793,8 @@ public sealed class ManagedVsCodeIntegrationTests
                 requireExtension: true,
                 openCodexOnStartup: true,
                 extensionMode: VsCodeExtensionMode.Isolated,
+                customCaVariable: CustomCaEnvironmentVariable.None,
+                customCaCertificatePath: null,
                 cancellationToken: cancellationToken);
 
         public void ConfigurePreviousManagedProfile(string profile)

@@ -70,6 +70,8 @@ public sealed class ProfileActivationService
         bool requireExtension,
         bool openCodexOnStartup,
         VsCodeExtensionMode extensionMode,
+        CustomCaEnvironmentVariable customCaVariable,
+        string? customCaCertificatePath,
         IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -92,6 +94,8 @@ public sealed class ProfileActivationService
                 requireExtension,
                 openCodexOnStartup,
                 extensionMode,
+                customCaVariable,
+                customCaCertificatePath,
                 progress,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -124,6 +128,8 @@ public sealed class ProfileActivationService
         bool requireExtension,
         bool openCodexOnStartup,
         VsCodeExtensionMode extensionMode,
+        CustomCaEnvironmentVariable customCaVariable,
+        string? customCaCertificatePath,
         IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
@@ -230,6 +236,23 @@ public sealed class ProfileActivationService
                 FailureCategory: ActivationFailureCategory.WorkspaceMissing);
         }
 
+        try
+        {
+            _ = ManagedEnvironmentOverridesBuilder.Build(
+                selectedProfile.DirectoryPath,
+                customCaVariable,
+                customCaCertificatePath);
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            return new ProfileActivationResult(
+                ProfileActivationStatus.InvalidDedicatedPath,
+                "CustomCaCertificateMissing",
+                FailureCategory: ActivationFailureCategory.CertificateMissing,
+                ExceptionType: exception.GetType().Name,
+                SanitizedExceptionMessage: DiagnosticTextSanitizer.Sanitize(exception.Message));
+        }
+
         CodexExtensionStatus extension = extensionManager.Detect(extensions);
         if (requireExtension && extension.State != CodexExtensionState.Installed)
         {
@@ -280,6 +303,8 @@ public sealed class ProfileActivationService
             workspace,
             openCodexOnStartup,
             extensionMode,
+            customCaVariable,
+            customCaCertificatePath,
             progress,
             cancellationToken).ConfigureAwait(false);
         if (launchResult.Status == ProfileActivationStatus.Succeeded
@@ -294,6 +319,8 @@ public sealed class ProfileActivationService
             previousState,
             previousActiveProfile,
             openCodexOnStartup,
+            customCaVariable,
+            customCaCertificatePath,
             progress,
             cancellationToken).ConfigureAwait(false);
         return rollback.Status == ProfileActivationStatus.Succeeded
@@ -323,6 +350,8 @@ public sealed class ProfileActivationService
         string? workspace,
         bool openCodexOnStartup,
         VsCodeExtensionMode extensionMode,
+        CustomCaEnvironmentVariable customCaVariable,
+        string? customCaCertificatePath,
         IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
@@ -336,7 +365,9 @@ public sealed class ProfileActivationService
                 sharedData,
                 profile.DirectoryPath,
                 workspace,
-                extensionMode);
+                extensionMode,
+                customCaVariable,
+                customCaCertificatePath);
             ManagedProcessIdentity launched = runtime.Launch(plan);
             var pendingState = new ManagedVsCodeInstanceState(
                 launched.ProcessId,
@@ -450,6 +481,8 @@ public sealed class ProfileActivationService
         ManagedVsCodeInstanceState previousState,
         string previousProfileId,
         bool openCodexOnStartup,
+        CustomCaEnvironmentVariable customCaVariable,
+        string? customCaCertificatePath,
         IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
@@ -479,6 +512,8 @@ public sealed class ProfileActivationService
             previousState.WorkspacePath,
             openCodexOnStartup,
             previousState.ExtensionMode,
+            customCaVariable,
+            customCaCertificatePath,
             progress,
             cancellationToken).ConfigureAwait(false);
     }

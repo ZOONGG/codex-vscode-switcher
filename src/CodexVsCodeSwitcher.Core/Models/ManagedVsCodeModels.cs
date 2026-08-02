@@ -11,6 +11,13 @@ public enum VsCodeExtensionMode
     Shared,
 }
 
+public enum CustomCaEnvironmentVariable
+{
+    None,
+    CodexCaCertificate,
+    SslCertFile,
+}
+
 public sealed record ManagedProcessIdentity(
     int ProcessId,
     DateTimeOffset StartTimeUtc);
@@ -98,6 +105,7 @@ public enum ActivationFailureCategory
     DedicatedDataDirectoryUnavailable,
     ExtensionMissing,
     ExtensionInstallationFailed,
+    CertificateMissing,
     ProcessExitedImmediately,
     MatchingProcessFoundWithoutWindow,
     WindowDetectionTimeout,

@@ -40,6 +40,10 @@ public sealed class OverlaySettings
 
     public bool UseExistingVsCodeExtensions { get; set; } = true;
 
+    public CustomCaEnvironmentVariable CustomCaEnvironmentVariable { get; set; }
+
+    public string CustomCaCertificatePath { get; set; } = string.Empty;
+
     public string DedicatedVsCodeSharedDataDirectory { get; set; } = string.Empty;
 
     public string CodexProfileRoot { get; set; } = string.Empty;

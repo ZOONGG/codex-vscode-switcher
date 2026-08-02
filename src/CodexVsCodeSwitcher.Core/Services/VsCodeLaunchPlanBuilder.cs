@@ -13,7 +13,9 @@ public sealed class VsCodeLaunchPlanBuilder
         string sharedDataDirectory,
         string profileCodexHome,
         string? workspacePath,
-        VsCodeExtensionMode extensionMode = VsCodeExtensionMode.Isolated)
+        VsCodeExtensionMode extensionMode = VsCodeExtensionMode.Isolated,
+        CustomCaEnvironmentVariable customCaVariable = CustomCaEnvironmentVariable.None,
+        string? customCaCertificatePath = null)
     {
         string executable = RequireFullPath(executablePath, nameof(executablePath));
         string userData = RequireFullPath(userDataDirectory, nameof(userDataDirectory));
@@ -45,10 +47,10 @@ public sealed class VsCodeLaunchPlanBuilder
         return new VsCodeProcessStartSpec(
             executable,
             arguments,
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                [CodexHomeVariable] = codexHome,
-            });
+            ManagedEnvironmentOverridesBuilder.Build(
+                codexHome,
+                customCaVariable,
+                customCaCertificatePath));
     }
 
     public VsCodeProcessStartSpec BuildExtensionInstall(

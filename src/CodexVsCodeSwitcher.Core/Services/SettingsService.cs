@@ -134,6 +134,7 @@ public sealed class SettingsService
             settings.CodexProfileRoot = layout.ProfilesDirectory;
             settings.CustomVsCodeExecutablePath = NormalizeOptionalPath(settings.CustomVsCodeExecutablePath);
             settings.LastOpenedWorkspace = NormalizeOptionalPath(settings.LastOpenedWorkspace);
+            settings.CustomCaCertificatePath = NormalizeOptionalPath(settings.CustomCaCertificatePath);
 
             protectedPaths?.AssertCanWrite(settings.DedicatedVsCodeUserDataDirectory);
             protectedPaths?.AssertCanWrite(settings.DedicatedVsCodeExtensionsDirectory);
