@@ -11,11 +11,16 @@ The managed instance always launches with:
 ```text
 Code.exe
   --user-data-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeData"
-  --extensions-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeExtensions"
   --shared-data-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeSharedData"
   --new-window
   [optional folder or .code-workspace]
 ```
+
+By default, **Use my existing VS Code extensions** is enabled, so no
+`--extensions-dir` argument is passed and VS Code uses `%USERPROFILE%\.vscode\extensions`.
+Only extension installation files are shared; user data, settings, storage, cookies,
+login state, and `CODEX_HOME` remain isolated. Advanced isolated mode passes
+`--extensions-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeExtensions"`.
 
 `CODEX_HOME` is added only to `ProcessStartInfo.Environment` for that managed launch and points directly to the selected directory under `%USERPROFILE%\.codex-vscode-profiles`. The switcher never copies a profile or replaces `auth.json`.
 
@@ -39,7 +44,7 @@ A window is managed only when all of the following remain valid:
 
 - the persisted root PID and process start time match;
 - the executable path exactly matches the configured/detected VS Code executable;
-- the root command line contains the exact dedicated `--user-data-dir`, `--extensions-dir`, and `--shared-data-dir`;
+- the root command line contains the exact dedicated `--user-data-dir` and `--shared-data-dir`, plus either no `--extensions-dir` in shared mode or the exact dedicated value in isolated mode;
 - the window belongs to the launched root process or a verified descendant;
 - the HWND is a visible top-level window owned by that verified process tree.
 
@@ -79,7 +84,12 @@ Clicking a profile starts this flow directly. The clicked profile is Pending unt
 
 ## Codex extension and workspaces
 
-The dedicated environment detects the official Marketplace extension `openai.chatgpt`. Installation occurs only after the explicit **Install Codex extension** action and targets only the dedicated extension directory.
+The managed environment detects the official Marketplace extension `openai.chatgpt` in the active extension directory. Shared mode never installs, updates, removes, enables, disables, or modifies ordinary extensions. Installation occurs only after an explicit action in isolated mode and targets only the dedicated extension directory.
+
+Settings includes sanitized DNS/TCP/TLS/HTTPS/WebSocket/backend diagnostics, a safe
+regular-vs-managed comparison, an allowlist-only proxy settings copy, optional
+path-only `CODEX_CA_CERTIFICATE`/`SSL_CERT_FILE` configuration, Codex log access,
+extension-host restart, and a reset limited to the switcher's diagnostic cache.
 
 The dedicated `User\settings.json` is updated atomically while preserving unrelated valid settings. `chatgpt.openOnStartup` is configured only there.
 

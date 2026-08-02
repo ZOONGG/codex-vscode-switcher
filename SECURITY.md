@@ -31,13 +31,15 @@ The legacy `%USERPROFILE%\.codex-profiles` source is read-only. Automatic migrat
 
 ## Runtime
 
-The runtime launches and controls only the dedicated VS Code process tree it created. Root PID, process start time, exact executable path, exact `--user-data-dir`, `--extensions-dir`, and `--shared-data-dir` arguments, descendants, and top-level HWND ownership are revalidated before window attachment or shutdown.
+The runtime launches and controls only the dedicated VS Code process tree it created. Root PID, process start time, exact executable path, exact `--user-data-dir` and `--shared-data-dir`, extension-mode-specific `--extensions-dir` presence, descendants, and top-level HWND ownership are revalidated before window attachment or shutdown.
 
 `CODEX_HOME` is a child-process environment override. The application does not use `setx`, registry environment values, global user/machine environment mutation, or shared authentication replacement.
 
 Normal switching uses `WM_CLOSE` and waits for VS Code to resolve unsaved work. It does not force-kill. Ordinary VS Code, ChatGPT Desktop, browsers, Explorer, and unrelated Electron applications are never targets.
 
-The official Codex extension is installed only after explicit user action and only into the dedicated extension directory.
+Shared extension mode is default and read-only. The official Codex extension is installed only after explicit user action in isolated mode and only into the dedicated extension directory.
+
+Network reports never include environment values, proxy credentials, authorization headers, cookies, command lines, or certificate contents. Optional custom CA configuration validates and passes a path only; TLS verification remains enabled. Proxy copying is allowlisted to `http.proxy`, `http.proxyStrictSSL`, and `http.proxySupport`, rejects embedded credentials, and requires confirmation.
 
 Optional customization import uses an allowlist and explicit preview/confirmation. It excludes global/workspace storage, SQLite databases, credentials, sessions, cookies, machine identifiers, logs, and temporary files.
 

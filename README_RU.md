@@ -11,11 +11,17 @@ Codex VS Code Switcher — независимое Windows-приложение �
 ```text
 Code.exe
   --user-data-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeData"
-  --extensions-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeExtensions"
   --shared-data-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeSharedData"
   --new-window
   [необязательная папка или .code-workspace]
 ```
+
+По умолчанию включено **«Использовать мои расширения VS Code»**, поэтому аргумент
+`--extensions-dir` не передаётся и используется `%USERPROFILE%\.vscode\extensions`.
+Общими являются только файлы установки расширений; user data, настройки, storage,
+cookies, состояние входа и `CODEX_HOME` остаются изолированными. В расширенном
+изолированном режиме передаётся
+`--extensions-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeExtensions"`.
 
 `CODEX_HOME` добавляется только в `ProcessStartInfo.Environment` этого запуска и указывает прямо на выбранный каталог в `%USERPROFILE%\.codex-vscode-profiles`. Профиль и `auth.json` не копируются и не заменяются.
 
@@ -39,7 +45,7 @@ Code.exe
 
 - совпадают сохранённый root PID и время запуска процесса;
 - точно совпадает путь к настроенному или найденному VS Code;
-- в командной строке root-процесса есть точные отдельные `--user-data-dir`, `--extensions-dir` и `--shared-data-dir`;
+- в командной строке root-процесса есть точные `--user-data-dir` и `--shared-data-dir`, а `--extensions-dir` отсутствует в общем режиме или точно указывает на отдельную папку в изолированном;
 - окно принадлежит root-процессу или проверенному потомку;
 - HWND остаётся видимым окном верхнего уровня этого дерева процессов.
 
@@ -79,7 +85,12 @@ Code.exe
 
 ## Расширение Codex и workspace
 
-В отдельной среде определяется официальное расширение `openai.chatgpt`. Установка начинается только после явного действия **«Установить расширение Codex»** и использует только отдельный каталог расширений.
+Официальное расширение `openai.chatgpt` определяется в активной папке расширений. Общий режим никогда не устанавливает, не обновляет, не удаляет, не включает, не отключает и не изменяет обычные расширения. Явная установка доступна только в изолированном режиме и использует отдельную папку.
+
+В настройках доступны санитизированные проверки DNS/TCP/TLS/HTTPS/WebSocket/backend,
+безопасное сравнение обычного и управляемого VS Code, allowlist-копирование настроек
+прокси, необязательная передача пути через `CODEX_CA_CERTIFICATE`/`SSL_CERT_FILE`,
+открытие журналов Codex, перезапуск extension host и сброс только диагностического кэша.
 
 Отдельный `User\settings.json` обновляется атомарно с сохранением остальных корректных настроек. `chatgpt.openOnStartup` задаётся только там.
 

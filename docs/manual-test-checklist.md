@@ -18,4 +18,17 @@ Use the local portable build only after automated verification completes. Do not
 14. Close Codex VS Code deliberately, use **Reset Codex VS Code runtime state**, and confirm profiles/settings/extensions remain.
 15. Optionally create the **Codex VS Code** shortcut and confirm it launches the last profile or chooser without replacing the ordinary VS Code shortcut.
 
+## Codex networking checklist
+
+1. Enable **Использовать мои расширения VS Code**.
+2. Restart Codex VS Code.
+3. Confirm the usual extensions appear.
+4. Open the Codex panel.
+5. Confirm chats finish loading.
+6. Send a harmless test message.
+7. Switch to a second profile.
+8. Confirm Codex loads under the second profile.
+9. Test all four profiles.
+10. Run **Проверить подключение Codex** if loading fails.
+
 Do not include account emails, authentication values, tokens, session identifiers, or screenshots containing credentials in test notes.

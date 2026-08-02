@@ -1,6 +1,8 @@
 param(
     [string]$VsCodeExecutable = "D:\Programss\code\Microsoft VS Code\Code.exe",
-    [int]$WindowTimeoutSeconds = 60
+    [int]$WindowTimeoutSeconds = 60,
+    [ValidateSet("All", "Shared", "Isolated")]
+    [string]$ExtensionMode = "All"
 )
 
 $ErrorActionPreference = "Stop"
@@ -74,6 +76,15 @@ $userData = Join-Path $temporaryRoot "user-data"
 $extensions = Join-Path $temporaryRoot "extensions"
 $sharedData = Join-Path $temporaryRoot "shared-data"
 New-Item -ItemType Directory -Path $codexHome, $userData, $extensions, $sharedData | Out-Null
+$currentMode = "Isolated"
+$networkEnvironmentNames = @(
+    "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+    "CODEX_CA_CERTIFICATE", "SSL_CERT_FILE", "SSL_CERT_DIR",
+    "NODE_EXTRA_CA_CERTS", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"
+)
+$presentNetworkEnvironmentNames = @($networkEnvironmentNames | Where-Object {
+    $null -ne [Environment]::GetEnvironmentVariable($_)
+})
 
 function Get-ExactManagedProcesses {
     Get-CimInstance Win32_Process -Filter "Name = 'Code.exe'" | Where-Object {
@@ -83,7 +94,11 @@ function Get-ExactManagedProcesses {
         -not [string]::IsNullOrWhiteSpace($commandLine) -and
         [IO.Path]::GetFullPath($processPath).Equals($executable, [StringComparison]::OrdinalIgnoreCase) -and
         $commandLine.Contains($userData, [StringComparison]::OrdinalIgnoreCase) -and
-        $commandLine.Contains($extensions, [StringComparison]::OrdinalIgnoreCase) -and
+        (($currentMode -eq "Isolated" -and
+            $commandLine.Contains("--extensions-dir", [StringComparison]::OrdinalIgnoreCase) -and
+            $commandLine.Contains($extensions, [StringComparison]::OrdinalIgnoreCase)) -or
+         ($currentMode -eq "Shared" -and
+            -not $commandLine.Contains("--extensions-dir", [StringComparison]::OrdinalIgnoreCase))) -and
         $commandLine.Contains($sharedData, [StringComparison]::OrdinalIgnoreCase)
     }
 }
@@ -164,7 +179,22 @@ function Set-ExactManagedWindowForeground {
 $ordinaryBefore = @(Get-CimInstance Win32_Process -Filter "Name = 'Code.exe'" | Select-Object -ExpandProperty ProcessId)
 $results = @()
 try {
-    foreach ($iteration in 1..2) {
+    $modes = if ($ExtensionMode -eq "All") { @("Shared", "Isolated") } else { @($ExtensionMode) }
+    if ($modes -contains "Shared") {
+        $codeCommand = Join-Path ([IO.Path]::GetDirectoryName($executable)) "bin\code.cmd"
+        if (-not (Test-Path -LiteralPath $codeCommand -PathType Leaf)) {
+            throw "VS Code CLI was not found for the shared-extension verification."
+        }
+
+        $sharedExtensions = @(& $codeCommand --list-extensions --show-versions --user-data-dir $userData)
+        if ($LASTEXITCODE -ne 0 -or -not ($sharedExtensions -match '^openai\.chatgpt@')) {
+            throw "Shared mode did not discover the normal openai.chatgpt extension installation."
+        }
+    }
+
+    foreach ($mode in $modes) {
+      $currentMode = $mode
+      foreach ($iteration in 1..2) {
         $startInfo = [Diagnostics.ProcessStartInfo]::new()
         $startInfo.FileName = $executable
         $startInfo.WorkingDirectory = [IO.Path]::GetDirectoryName($executable)
@@ -172,11 +202,15 @@ try {
         $startInfo.CreateNoWindow = $false
         $startInfo.ArgumentList.Add("--user-data-dir")
         $startInfo.ArgumentList.Add($userData)
-        $startInfo.ArgumentList.Add("--extensions-dir")
-        $startInfo.ArgumentList.Add($extensions)
+        if ($currentMode -eq "Isolated") {
+            $startInfo.ArgumentList.Add("--extensions-dir")
+            $startInfo.ArgumentList.Add($extensions)
+        }
         $startInfo.ArgumentList.Add("--shared-data-dir")
         $startInfo.ArgumentList.Add($sharedData)
-        $startInfo.ArgumentList.Add("--disable-extensions")
+        if ($currentMode -eq "Isolated") {
+            $startInfo.ArgumentList.Add("--disable-extensions")
+        }
         $startInfo.ArgumentList.Add("--disable-workspace-trust")
         $startInfo.ArgumentList.Add("--new-window")
         $startInfo.Environment["CODEX_HOME"] = $codexHome
@@ -189,16 +223,20 @@ try {
         $focus = Set-ExactManagedWindowForeground -WindowHandle $window.WindowHandle
         Close-ExactManagedWindow -WindowHandle $window.WindowHandle
         $results += [pscustomobject]@{
+            ExtensionMode = $currentMode
             Iteration = $iteration
             RootProcessId = $window.RootProcessId
             WindowProcessId = $window.WindowProcessId
             LauncherHandoff = $window.RootProcessId -ne $window.WindowProcessId
             WindowHandle = $window.WindowHandle
             ExactArgumentOwnership = $true
+            ExtensionsArgumentPresent = $currentMode -eq "Isolated"
+            ParentNetworkEnvironmentNamesPreserved = $presentNetworkEnvironmentNames
             FocusRequested = $focus.Requested
             FocusVerified = $focus.Verified
             GracefulCloseVerified = $true
         }
+      }
     }
 
     $ordinaryAfter = @(Get-CimInstance Win32_Process -Filter "Name = 'Code.exe'" | Select-Object -ExpandProperty ProcessId)

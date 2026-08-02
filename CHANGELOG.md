@@ -4,6 +4,10 @@
 
 ### Added
 
+- Shared ordinary VS Code extension installation files as the default, with an optional isolated extensions mode.
+- Sanitized DNS/TCP/TLS/HTTPS/WebSocket/backend diagnostics, safe VS Code environment comparison, process-path reporting, and networking recovery actions.
+- Confirmation-only allowlist proxy settings copy and path-only custom CA environment configuration.
+
 - Explicit Settings preview visibility with live layout, orientation, width, scale, offset, and position updates.
 - Sanitized structured activation diagnostics, log/diagnostic actions, and safe runtime-state reset.
 - Optional allowlist-only VS Code customization import and a separate `Codex VS Code` desktop shortcut.
@@ -37,6 +41,9 @@
 - Profile activation controls are disabled for invalid and incomplete copied profiles.
 
 ### Fixed
+
+- Managed VS Code now preserves the complete inherited parent environment while overriding only process-owned values such as `CODEX_HOME` and an explicitly selected CA path.
+- Codex VS Code can use the exact ordinary Codex extension/backend executable path for VPN and per-application routing compatibility.
 
 - Repeated real profile switches no longer fail when background activation progress crosses the WPF dispatcher boundary.
 - Profile Pending/Active state and the switch lock now recover after success, failure, timeout, and cancellation.

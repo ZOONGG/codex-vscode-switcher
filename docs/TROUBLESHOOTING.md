@@ -10,7 +10,13 @@ Only valid directories under `%USERPROFILE%\.codex-vscode-profiles` containing a
 
 ## The Codex extension is missing
 
-Use **Install Codex extension**. Network access occurs only after that explicit action and targets the dedicated extension directory.
+With **Use my existing VS Code extensions** enabled, install Codex in ordinary VS Code; the switcher never changes ordinary extensions. In advanced isolated mode, use **Install Codex extension** after confirmation.
+
+## Chats keep loading or prompts do not complete
+
+Keep **Use my existing VS Code extensions** enabled and restart Codex VS Code. This makes ordinary and managed VS Code use the same Codex extension/backend executable path while user data and `CODEX_HOME` remain isolated.
+
+Run **Test Codex connection** to see separate DNS, TCP, TLS, HTTPS, WebSocket, proxy, certificate, and backend results. HTTP 401/403 means the server was reached. Use **Compare regular and Codex VS Code** to copy a sanitized path/hash comparison for VPN per-application routing. Never disable certificate verification or add `--ignore-certificate-errors`.
 
 ## The overlay is hidden
 
