@@ -62,6 +62,29 @@ public sealed class CompanionBridgeService
             openCodexAutomatically);
     }
 
+    public bool TryBeginSession(
+        bool openCodexAutomatically,
+        out ManagedCompanionLaunchOptions? launchOptions,
+        out Exception? failure)
+    {
+        try
+        {
+            launchOptions = BeginSession(openCodexAutomatically);
+            failure = null;
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is DirectoryNotFoundException
+                or IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException)
+        {
+            launchOptions = null;
+            failure = exception;
+            return false;
+        }
+    }
+
     public bool TryResumeSession()
     {
         string path = GetBridgeFile(StateFileName);

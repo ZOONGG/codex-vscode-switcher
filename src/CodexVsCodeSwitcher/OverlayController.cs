@@ -24,6 +24,7 @@ internal sealed class OverlayController : IDisposable
     private readonly CompanionBridgeService companionBridge;
     private readonly ICodexExtensionManager extensionManager;
     private readonly VsCodeLaunchPlanBuilder launchPlanBuilder;
+    private readonly ProjectLaunchContinuation projectLaunchContinuation;
     private readonly IStartupRegistrationService startupRegistrationService;
     private readonly SafeLogger logger;
     private readonly MinimalBackupService backupMaintenance;
@@ -54,6 +55,8 @@ internal sealed class OverlayController : IDisposable
     private IDisposable? settingsPreviewLease;
     private SidebarOpenStatus lastSidebarStatus;
     private bool shortcutConflictReported;
+    private DateTimeOffset? companionSessionStartedAtUtc;
+    private bool companionStateWarningShown;
 
     public OverlayController(
         CodexVsCodeStorageLayout paths,
@@ -85,6 +88,7 @@ internal sealed class OverlayController : IDisposable
         this.companionBridge = companionBridge;
         this.extensionManager = extensionManager;
         this.launchPlanBuilder = launchPlanBuilder;
+        projectLaunchContinuation = new ProjectLaunchContinuation(protectedPaths);
         this.startupRegistrationService = startupRegistrationService;
         this.logger = logger;
         this.backupMaintenance = backupMaintenance;
@@ -130,7 +134,15 @@ internal sealed class OverlayController : IDisposable
         managedWindowTracker.StateChanged += OnManagedWindowStateChanged;
         managedWindowTracker.Start();
         windowTrackingTimer.Start();
-        if (ObserveManagedInstanceSafely() is not null && companionBridge.TryResumeSession())
+        ManagedVsCodeInstanceState? startupRuntimeState = managedInstanceStore.Read();
+        ManagedVsCodeObservation? startupObservation = ObserveManagedInstanceSafely();
+        if (startupRuntimeState is not null && startupObservation is null)
+        {
+            logger.Info("A stale managed launch state was discarded during startup.");
+            overlayWindow?.ShowError(localizer["StaleLaunchStateReset"]);
+        }
+
+        if (startupObservation is not null && companionBridge.TryResumeSession())
         {
             SynchronizeCompanionState();
         }
@@ -239,6 +251,9 @@ internal sealed class OverlayController : IDisposable
             visibilityLeases.Acquire(OverlayVisibilityReason.ProfileSwitchingStatus);
         ReconcileOverlayVisibility();
         overlayWindow?.SetSwitching(true, profile, displayName);
+        string? workspace = null;
+        string activationStage = "profile-preflight";
+        bool companionUnavailable = false;
         try
         {
             if (!await EnsureCodexExtensionForLaunchAsync(displayName).ConfigureAwait(true))
@@ -247,11 +262,30 @@ internal sealed class OverlayController : IDisposable
             }
 
             SynchronizeCompanionState();
-            string? workspace = settings.ReopenLastWorkspaceAfterSwitch
+            workspace = settings.ReopenLastWorkspaceAfterSwitch
                 ? FirstNonEmpty(workspaceHistory.ReadLastWorkspace(), settings.LastOpenedWorkspace)
                 : null;
-            ManagedCompanionLaunchOptions companion = companionBridge.BeginSession(
-                settings.LaunchCodexSidebarOnStartup);
+            activationStage = "companion-startup";
+            ManagedCompanionLaunchOptions? companion;
+            if (companionBridge.TryBeginSession(
+                settings.LaunchCodexSidebarOnStartup,
+                out companion,
+                out Exception? companionFailure))
+            {
+                companionSessionStartedAtUtc = DateTimeOffset.UtcNow;
+                companionStateWarningShown = false;
+            }
+            else
+            {
+                companionUnavailable = true;
+                companionSessionStartedAtUtc = null;
+                companionStateWarningShown = true;
+                logger.Info(
+                    $"Bundled companion startup is unavailable; managed VS Code launch will continue. " +
+                    $"{companionFailure!.GetType().Name}: {DiagnosticTextSanitizer.Sanitize(companionFailure.Message)}");
+            }
+
+            activationStage = "managed-vscode-activation";
             ProfileActivationResult result = await CreateActivationService()
                 .ActivateAsync(
                     profile,
@@ -281,6 +315,10 @@ internal sealed class OverlayController : IDisposable
                 managedWindowTracker?.Reconcile();
                 settingsWindow?.RefreshIntegrationPage();
                 SynchronizeCompanionState();
+                if (companionUnavailable)
+                {
+                    ShowIntegrationNotice("ManagedVsCodeLaunchedCompanionUnavailable");
+                }
             }
             else
             {
@@ -294,6 +332,7 @@ internal sealed class OverlayController : IDisposable
                 trayIcon?.ShowBalloon("Codex VS Code Switcher", failureMessage);
                 logger.Info($"Managed VS Code activation for profile '{profile}' ended with {result.Status}.");
                 settingsWindow?.RefreshIntegrationPage();
+                QueueLaunchRecovery(profile, failureMessage);
             }
         }
         catch (OperationCanceledException)
@@ -312,12 +351,13 @@ internal sealed class OverlayController : IDisposable
                 SelectedExtensionsDirectory,
                 settings.DedicatedVsCodeSharedDataDirectory,
                 profile,
-                settings.LastOpenedWorkspace,
+                workspace,
                 [],
-                "activation",
+                activationStage,
                 exception.GetType().Name,
                 DiagnosticTextSanitizer.Sanitize(exception.Message));
-            ShowIntegrationError("VsCodeLaunchFailed");
+            ShowIntegrationError("ProjectLaunchInterrupted");
+            QueueLaunchRecovery(profile, localizer["ProjectLaunchInterrupted"]);
         }
         finally
         {
@@ -329,6 +369,9 @@ internal sealed class OverlayController : IDisposable
     }
 
     private void LaunchManagedVsCode()
+        => _ = LaunchManagedVsCodeAsync();
+
+    private async Task LaunchManagedVsCodeAsync()
     {
         string? active = activeProfileStore.Read();
         if (string.IsNullOrWhiteSpace(active))
@@ -353,66 +396,97 @@ internal sealed class OverlayController : IDisposable
             }
         }
 
-        string? rememberedProject = FirstNonEmpty(
-            workspaceHistory.ReadLastWorkspace(),
-            settings.LastOpenedWorkspace);
-        if (!string.IsNullOrWhiteSpace(rememberedProject)
-            && !Directory.Exists(rememberedProject)
-            && !(File.Exists(rememberedProject)
-                && Path.GetExtension(rememberedProject).Equals(
-                    ".code-workspace",
-                    StringComparison.OrdinalIgnoreCase)))
+        PendingProjectActivation pending = projectLaunchContinuation.Begin(active);
+        try
         {
-            if (!ResolveMissingProject(rememberedProject))
+            string? rememberedProject = FirstNonEmpty(
+                workspaceHistory.ReadLastWorkspace(),
+                settings.LastOpenedWorkspace);
+            if (!string.IsNullOrWhiteSpace(rememberedProject)
+                && !Directory.Exists(rememberedProject)
+                && !(File.Exists(rememberedProject)
+                    && Path.GetExtension(rememberedProject).Equals(
+                        ".code-workspace",
+                        StringComparison.OrdinalIgnoreCase)))
             {
-                return;
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(rememberedProject))
-        {
-            Window? owner = settingsWindow?.IsVisible == true ? settingsWindow : null;
-            IntPtr nativeOwner = owner is null && overlayWindow?.IsVisible == true
-                ? overlayWindow.Handle
-                : IntPtr.Zero;
-            string? legacyLast = string.IsNullOrWhiteSpace(settings.LastOpenedWorkspace)
-                ? null
-                : settings.LastOpenedWorkspace;
-            FirstLaunchProjectAction projectAction = FirstLaunchProjectDialog.Show(
-                owner,
-                nativeOwner,
-                legacyLast is not null,
-                localizer);
-            switch (projectAction)
-            {
-                case FirstLaunchProjectAction.LastProject when legacyLast is not null:
-                    workspaceHistory.SaveLastWorkspace(legacyLast);
-                    break;
-                case FirstLaunchProjectAction.ChooseFolder:
-                    SelectWorkspaceFolder();
-                    if (workspaceHistory.ReadLastWorkspace() is null)
-                    {
-                        return;
-                    }
-                    break;
-                case FirstLaunchProjectAction.ChooseWorkspaceFile:
-                    SelectWorkspaceFile();
-                    if (workspaceHistory.ReadLastWorkspace() is null)
-                    {
-                        return;
-                    }
-                    break;
-                case FirstLaunchProjectAction.OpenEmpty:
-                    workspaceHistory.SaveLastWorkspace(null);
-                    settings.LastOpenedWorkspace = string.Empty;
-                    SaveSettings(settings);
-                    break;
-                default:
+                if (!ResolveMissingProject(rememberedProject))
+                {
                     return;
-            }
-        }
+                }
 
-        _ = SwitchProfileAsync(active, restartIfActive: false);
+                rememberedProject = FirstNonEmpty(
+                    workspaceHistory.ReadLastWorkspace(),
+                    settings.LastOpenedWorkspace);
+            }
+
+            ResolvedProjectActivation selection;
+            if (string.IsNullOrWhiteSpace(rememberedProject))
+            {
+                Window? owner = settingsWindow?.IsVisible == true ? settingsWindow : null;
+                IntPtr nativeOwner = owner is null && overlayWindow?.IsVisible == true
+                    ? overlayWindow.Handle
+                    : IntPtr.Zero;
+                FirstLaunchProjectAction projectAction = FirstLaunchProjectDialog.Show(
+                    owner,
+                    nativeOwner,
+                    hasLastProject: false,
+                    localizer);
+                switch (projectAction)
+                {
+                    case FirstLaunchProjectAction.ChooseFolder
+                        when TryChooseWorkspaceFolder(out string? folder):
+                        selection = projectLaunchContinuation.SelectFolder(pending, folder!);
+                        break;
+                    case FirstLaunchProjectAction.ChooseWorkspaceFile
+                        when TryChooseWorkspaceFile(out string? workspaceFile):
+                        selection = projectLaunchContinuation.SelectWorkspaceFile(pending, workspaceFile!);
+                        break;
+                    case FirstLaunchProjectAction.OpenEmpty:
+                        selection = projectLaunchContinuation.OpenWithoutProject(pending);
+                        break;
+                    default:
+                        return;
+                }
+            }
+            else if (Directory.Exists(rememberedProject))
+            {
+                selection = projectLaunchContinuation.SelectFolder(pending, rememberedProject);
+            }
+            else
+            {
+                selection = projectLaunchContinuation.SelectWorkspaceFile(pending, rememberedProject);
+            }
+
+            await projectLaunchContinuation.ResumeAsync(
+                selection,
+                PersistProjectSelection,
+                selectedProfile => SwitchProfileAsync(selectedProfile, restartIfActive: false));
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException)
+        {
+            logger.Error("The selected project could not continue the pending activation.", exception);
+            lastActivationDiagnostic = new ActivationDiagnostic(
+                ActivationFailureCategory.Unexpected,
+                DateTimeOffset.UtcNow,
+                GetAppVersion(),
+                executableLocator.Locate(settings.CustomVsCodeExecutablePath)
+                    ?? settings.CustomVsCodeExecutablePath,
+                settings.DedicatedVsCodeUserDataDirectory,
+                SelectedExtensionsDirectory,
+                settings.DedicatedVsCodeSharedDataDirectory,
+                pending.ProfileId,
+                workspaceHistory.ReadLastWorkspace(),
+                [],
+                "project-selection-continuation",
+                exception.GetType().Name,
+                DiagnosticTextSanitizer.Sanitize(exception.Message));
+            ShowIntegrationError("ProjectLaunchInterrupted");
+            QueueLaunchRecovery(pending.ProfileId, localizer["ProjectLaunchInterrupted"]);
+        }
     }
 
     private void RestartManagedVsCode()
@@ -464,8 +538,19 @@ internal sealed class OverlayController : IDisposable
         CompanionBridgeState? bridgeState = companionBridge.TryReadAndApplyLatest();
         if (bridgeState is null)
         {
+            if (!companionStateWarningShown
+                && companionSessionStartedAtUtc is DateTimeOffset started
+                && DateTimeOffset.UtcNow - started >= TimeSpan.FromSeconds(25)
+                && managedObservation?.Window is not null)
+            {
+                companionStateWarningShown = true;
+                ShowIntegrationNotice("CompanionStateUnavailableWarning");
+            }
+
             return;
         }
+
+        companionSessionStartedAtUtc = null;
 
         string? current = workspaceHistory.ReadLastWorkspace();
         if (!string.IsNullOrWhiteSpace(current)
@@ -495,7 +580,7 @@ internal sealed class OverlayController : IDisposable
         }
         else if (bridgeState.SidebarStatus == SidebarOpenStatus.Failed)
         {
-            ShowIntegrationError("CodexSidebarOpenFailed");
+            ShowIntegrationNotice("CodexSidebarOpenFailed");
         }
     }
 
@@ -1067,18 +1152,98 @@ internal sealed class OverlayController : IDisposable
             profileId,
             workspace,
             result.Processes ?? [],
-            result.TimeoutStage,
+            result.TimeoutStage ?? result.FailureCategory switch
+            {
+                ActivationFailureCategory.ExecutableNotFound => "executable-validation",
+                ActivationFailureCategory.ExecutableCouldNotStart => "process-start",
+                ActivationFailureCategory.AccessDenied => "process-start",
+                ActivationFailureCategory.ProfileInvalid => "profile-validation",
+                ActivationFailureCategory.DedicatedDataDirectoryUnavailable => "dedicated-runtime-preparation",
+                ActivationFailureCategory.ExtensionMissing => "extension-validation",
+                ActivationFailureCategory.CertificateMissing => "certificate-validation",
+                ActivationFailureCategory.WorkspaceMissing => "project-validation",
+                ActivationFailureCategory.PreviousVsCodeDidNotClose => "managed-shutdown",
+                ActivationFailureCategory.RollbackFailed => "rollback",
+                _ => "activation",
+            },
             result.ExceptionType,
             result.SanitizedExceptionMessage);
 
     private string BuildActivationFailureMessage(
         ProfileActivationResult result,
         string fallback)
-        => result.FailureCategory == ActivationFailureCategory.ExecutableNotFound
-            ? localizer.Format(
+        => result.FailureCategory switch
+        {
+            ActivationFailureCategory.ExecutableNotFound => localizer.Format(
                 "VsCodeExecutableMissingWithPath",
-                settings.CustomVsCodeExecutablePath)
-            : fallback;
+                settings.CustomVsCodeExecutablePath),
+            ActivationFailureCategory.ExecutableCouldNotStart => localizer["VsCodeProcessCouldNotStart"],
+            ActivationFailureCategory.WindowDetectionTimeout => localizer["VsCodeWindowDetectionTimeout"],
+            ActivationFailureCategory.MatchingProcessFoundWithoutWindow => localizer["ManagedWindowNotFoundProcessStillRunning"],
+            ActivationFailureCategory.WorkspaceMissing => localizer.Format(
+                "ProjectPathUnavailable",
+                result.SanitizedExceptionMessage ?? settings.LastOpenedWorkspace),
+            ActivationFailureCategory.Unexpected => localizer["ProjectLaunchInterrupted"],
+            _ => fallback,
+        };
+
+    private void QueueLaunchRecovery(string profileId, string failureMessage)
+        => _ = Application.Current.Dispatcher.BeginInvoke(() =>
+            ShowLaunchRecovery(profileId, failureMessage));
+
+    private void ShowLaunchRecovery(string profileId, string failureMessage)
+    {
+        Window? owner = settingsWindow?.IsVisible == true ? settingsWindow : null;
+        IntPtr nativeOwner = owner is null && overlayWindow?.IsVisible == true
+            ? overlayWindow.Handle
+            : IntPtr.Zero;
+        LaunchFailureAction action = LaunchFailureDialog.Show(
+            owner,
+            nativeOwner,
+            failureMessage,
+            localizer);
+        switch (action)
+        {
+            case LaunchFailureAction.Retry:
+                _ = SwitchProfileAsync(profileId, restartIfActive: false);
+                break;
+            case LaunchFailureAction.ChooseAnotherProject
+                when TryChooseWorkspaceFolder(out string? selectedPath):
+                PersistProjectSelection(selectedPath);
+                _ = SwitchProfileAsync(profileId, restartIfActive: false);
+                break;
+            case LaunchFailureAction.OpenWithoutProject:
+                PersistProjectSelection(null);
+                _ = SwitchProfileAsync(profileId, restartIfActive: false);
+                break;
+            case LaunchFailureAction.OpenDiagnostics:
+                ShowLastActivationDiagnostics();
+                break;
+            case LaunchFailureAction.ResetLaunchState:
+                ResetManagedRuntimeState();
+                break;
+        }
+    }
+
+    private void ShowLastActivationDiagnostics()
+    {
+        if (lastActivationDiagnostic is null)
+        {
+            ShowIntegrationNotice("NoDiagnosticsAvailable");
+            return;
+        }
+
+        var window = new DiagnosticReportWindow(
+            localizer["Diagnostics"],
+            ActivationDiagnosticsFormatter.Format(lastActivationDiagnostic),
+            localizer);
+        if (settingsWindow?.IsVisible == true)
+        {
+            window.Owner = settingsWindow;
+        }
+
+        window.ShowDialog();
+    }
 
     private async Task ImportVsCodeSetupAsync()
     {
@@ -1594,6 +1759,15 @@ internal sealed class OverlayController : IDisposable
 
     private void SelectWorkspaceFolder()
     {
+        if (TryChooseWorkspaceFolder(out string? selectedPath))
+        {
+            PersistProjectSelection(selectedPath);
+        }
+    }
+
+    private bool TryChooseWorkspaceFolder(out string? selectedPath)
+    {
+        selectedPath = null;
         using var dialog = new System.Windows.Forms.FolderBrowserDialog
         {
             Description = localizer["SelectWorkspaceFolder"],
@@ -1605,15 +1779,24 @@ internal sealed class OverlayController : IDisposable
         };
         if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
         {
-            settings.LastOpenedWorkspace = Path.GetFullPath(dialog.SelectedPath);
-            workspaceHistory.SaveLastWorkspace(settings.LastOpenedWorkspace);
-            SaveSettings(settings);
-            settingsWindow?.RefreshIntegrationPage();
+            selectedPath = Path.GetFullPath(dialog.SelectedPath);
+            return true;
         }
+
+        return false;
     }
 
     private void SelectWorkspaceFile()
     {
+        if (TryChooseWorkspaceFile(out string? selectedPath))
+        {
+            PersistProjectSelection(selectedPath);
+        }
+    }
+
+    private bool TryChooseWorkspaceFile(out string? selectedPath)
+    {
+        selectedPath = null;
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
             Title = localizer["SelectWorkspaceFile"],
@@ -1623,11 +1806,23 @@ internal sealed class OverlayController : IDisposable
         };
         if (dialog.ShowDialog(settingsWindow) == true)
         {
-            settings.LastOpenedWorkspace = Path.GetFullPath(dialog.FileName);
-            workspaceHistory.SaveLastWorkspace(settings.LastOpenedWorkspace);
-            SaveSettings(settings);
-            settingsWindow?.RefreshIntegrationPage();
+            selectedPath = Path.GetFullPath(dialog.FileName);
+            return true;
         }
+
+        return false;
+    }
+
+    private void PersistProjectSelection(string? projectPath)
+    {
+        string? normalized = string.IsNullOrWhiteSpace(projectPath)
+            ? null
+            : Path.GetFullPath(projectPath);
+        workspaceHistory.SaveLastWorkspace(normalized);
+        settings.LastOpenedWorkspace = normalized ?? string.Empty;
+        SaveSettings(settings);
+        trayIcon?.UpdateProjects(workspaceHistory.ReadSnapshot());
+        settingsWindow?.RefreshIntegrationPage();
     }
 
     private void ClearWorkspaceForNextLaunch()
@@ -1638,11 +1833,7 @@ internal sealed class OverlayController : IDisposable
 
     private void SetEmptyWorkspace()
     {
-        settings.LastOpenedWorkspace = string.Empty;
-        workspaceHistory.SaveLastWorkspace(null);
-        SaveSettings(settings);
-        trayIcon?.UpdateProjects(workspaceHistory.ReadSnapshot());
-        settingsWindow?.RefreshIntegrationPage();
+        PersistProjectSelection(null);
     }
 
     private void SelectRecentProject(string projectPath)
@@ -1658,10 +1849,7 @@ internal sealed class OverlayController : IDisposable
             return;
         }
 
-        workspaceHistory.SaveLastWorkspace(projectPath);
-        settings.LastOpenedWorkspace = Path.GetFullPath(projectPath);
-        SaveSettings(settings);
-        trayIcon?.UpdateProjects(workspaceHistory.ReadSnapshot());
+        PersistProjectSelection(projectPath);
         RestartManagedVsCode();
     }
 

@@ -40,11 +40,6 @@ public sealed class VsCodeLaunchPlanBuilder
             arguments.Insert(2, "--extensions-dir");
             arguments.Insert(3, extensions);
         }
-        if (workspace is not null)
-        {
-            arguments.Add(workspace);
-        }
-
         var environment = new Dictionary<string, string>(
             ManagedEnvironmentOverridesBuilder.Build(
                 codexHome,
@@ -66,6 +61,13 @@ public sealed class VsCodeLaunchPlanBuilder
             environment[CompanionBridgeService.OpenCodexEnvironmentVariable] =
                 companion.OpenCodexAutomatically ? "1" : "0";
             environment[CompanionBridgeService.UserDataEnvironmentVariable] = userData;
+        }
+
+        if (workspace is not null)
+        {
+            // Keep the selected project as one final ArgumentList entry. ProcessStartInfo
+            // performs platform quoting; callers must never pre-quote this value.
+            arguments.Add(workspace);
         }
 
         return new VsCodeProcessStartSpec(

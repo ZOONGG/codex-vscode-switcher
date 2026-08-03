@@ -81,7 +81,7 @@ public static class ActivationDiagnosticsFormatter
                     $"{process.ProcessId}@{process.StartTimeUtc.ToUniversalTime():O}"));
         }
 
-        Add(output, "timeoutStage", diagnostic.TimeoutStage);
+        Add(output, "stage", diagnostic.TimeoutStage);
         Add(output, "exceptionType", diagnostic.ExceptionType);
         Add(output, "message", DiagnosticTextSanitizer.Sanitize(diagnostic.SanitizedMessage));
         return output.ToString().TrimEnd();

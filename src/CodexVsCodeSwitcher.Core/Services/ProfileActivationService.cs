@@ -5,7 +5,7 @@ namespace CodexVsCodeSwitcher.Core.Services;
 
 public sealed class ProfileActivationService
 {
-    private static readonly TimeSpan LaunchTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan LaunchTimeout = TimeSpan.FromSeconds(45);
     private static readonly SemaphoreSlim ApplicationSwitchLock = new(1, 1);
     private readonly string profileRoot;
     private readonly IProtectedPathPolicy protectedPaths;
