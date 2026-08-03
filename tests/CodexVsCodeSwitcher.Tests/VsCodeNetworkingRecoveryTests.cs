@@ -5,34 +5,6 @@ namespace CodexVsCodeSwitcher.Tests;
 
 public sealed class VsCodeNetworkingRecoveryTests
 {
-    [Theory]
-    [InlineData(VsCodeExtensionMode.Shared, false)]
-    [InlineData(VsCodeExtensionMode.Isolated, true)]
-    public void ExtensionHostRestart_TargetsOnlyTheManagedVsCodeEnvironment(
-        VsCodeExtensionMode mode,
-        bool expectsExtensionsArgument)
-    {
-        using var temp = new TempDirectory();
-        VsCodeProcessStartSpec plan = new VsCodeLaunchPlanBuilder().BuildExtensionHostRestart(
-            Path.Combine(temp.Path, "Code.exe"),
-            Path.Combine(temp.Path, "user-data"),
-            Path.Combine(temp.Path, "extensions"),
-            Path.Combine(temp.Path, "shared-data"),
-            Path.Combine(temp.Path, "profile"),
-            mode,
-            CustomCaEnvironmentVariable.None,
-            null);
-
-        Assert.Equal(expectsExtensionsArgument, plan.Arguments.Contains("--extensions-dir"));
-        Assert.Contains("--user-data-dir", plan.Arguments);
-        Assert.Contains("--shared-data-dir", plan.Arguments);
-        Assert.Contains("--reuse-window", plan.Arguments);
-        Assert.Contains(
-            "vscode://command/workbench.action.restartExtensionHost",
-            plan.Arguments);
-        Assert.DoesNotContain("--ignore-certificate-errors", plan.Arguments);
-    }
-
     [Fact]
     public void SafeComparison_ReportsExactDifferentBackendPathsAndMatchingHashes()
     {

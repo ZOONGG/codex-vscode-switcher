@@ -31,14 +31,14 @@ public sealed class VsCodeLaunchPlanBuilder
         {
             "--user-data-dir",
             userData,
-            "--shared-data-dir",
-            sharedData,
             "--new-window",
         };
         if (extensionMode == VsCodeExtensionMode.Isolated)
         {
             arguments.Insert(2, "--extensions-dir");
             arguments.Insert(3, extensions);
+            arguments.Insert(4, "--shared-data-dir");
+            arguments.Insert(5, sharedData);
         }
         var environment = new Dictionary<string, string>(
             ManagedEnvironmentOverridesBuilder.Build(
@@ -54,27 +54,12 @@ public sealed class VsCodeLaunchPlanBuilder
             string bridgeDirectory = RequireFullPath(
                 companion.BridgeDirectory,
                 nameof(companion.BridgeDirectory));
+
+            // Only the bundled bridge runs as a development extension. The official
+            // OpenAI extension must stay in VS Code's production registry so its
+            // application-scoped state and authenticated web behavior remain intact.
             arguments.Add("--extensionDevelopmentPath");
             arguments.Add(extensionDirectory);
-            if (!string.IsNullOrWhiteSpace(companion.OfficialCodexExtensionDirectory))
-            {
-                string officialCodexExtension = RequireFullPath(
-                    companion.OfficialCodexExtensionDirectory,
-                    nameof(companion.OfficialCodexExtensionDirectory));
-                if (officialCodexExtension.Equals(extensionDirectory, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new ArgumentException(
-                        "The companion and official Codex extension paths must be different.",
-                        nameof(companion));
-                }
-
-                // VS Code 1.131 treats Codex as application-scoped. A dedicated
-                // --user-data-dir therefore hides the otherwise shared installation.
-                // Loading the already validated local package as a second development
-                // extension preserves user-data and CODEX_HOME isolation.
-                arguments.Add("--extensionDevelopmentPath");
-                arguments.Add(officialCodexExtension);
-            }
             environment[CompanionBridgeService.BridgePathEnvironmentVariable] = bridgeDirectory;
             environment[CompanionBridgeService.SessionEnvironmentVariable] = companion.SessionId;
             environment[CompanionBridgeService.OpenCodexEnvironmentVariable] =
@@ -128,40 +113,6 @@ public sealed class VsCodeLaunchPlanBuilder
                 normalizedExtensionId,
             ],
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
-    }
-
-    public VsCodeProcessStartSpec BuildExtensionHostRestart(
-        string executablePath,
-        string userDataDirectory,
-        string extensionsDirectory,
-        string sharedDataDirectory,
-        string profileCodexHome,
-        VsCodeExtensionMode extensionMode,
-        CustomCaEnvironmentVariable customCaVariable,
-        string? customCaCertificatePath)
-    {
-        var arguments = new List<string>
-        {
-            "--user-data-dir",
-            RequireFullPath(userDataDirectory, nameof(userDataDirectory)),
-            "--shared-data-dir",
-            RequireFullPath(sharedDataDirectory, nameof(sharedDataDirectory)),
-            "--reuse-window",
-            "vscode://command/workbench.action.restartExtensionHost",
-        };
-        if (extensionMode == VsCodeExtensionMode.Isolated)
-        {
-            arguments.Insert(2, "--extensions-dir");
-            arguments.Insert(3, RequireFullPath(extensionsDirectory, nameof(extensionsDirectory)));
-        }
-
-        return new VsCodeProcessStartSpec(
-            RequireFullPath(executablePath, nameof(executablePath)),
-            arguments,
-            ManagedEnvironmentOverridesBuilder.Build(
-                RequireFullPath(profileCodexHome, nameof(profileCodexHome)),
-                customCaVariable,
-                customCaCertificatePath));
     }
 
     private static string RequireFullPath(string value, string parameterName)

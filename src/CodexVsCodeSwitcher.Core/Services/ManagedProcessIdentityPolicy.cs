@@ -22,11 +22,7 @@ public sealed class ManagedProcessIdentityPolicy
                 evidence.CommandLineArguments,
                 "--user-data-dir",
                 expected.UserDataDirectory)
-            && HasExpectedExtensionArguments(expected, evidence.CommandLineArguments)
-            && HasArgumentValue(
-                evidence.CommandLineArguments,
-                "--shared-data-dir",
-                expected.SharedDataDirectory);
+            && HasExpectedStorageArguments(expected, evidence.CommandLineArguments);
     }
 
     public bool IsManagedRootHandoffCandidate(
@@ -46,11 +42,7 @@ public sealed class ManagedProcessIdentityPolicy
                 evidence.CommandLineArguments,
                 "--user-data-dir",
                 expected.UserDataDirectory)
-            && HasExpectedExtensionArguments(expected, evidence.CommandLineArguments)
-            && HasArgumentValue(
-                evidence.CommandLineArguments,
-                "--shared-data-dir",
-                expected.SharedDataDirectory);
+            && HasExpectedStorageArguments(expected, evidence.CommandLineArguments);
     }
 
     public bool IsExactManagedProcessCandidate(
@@ -65,19 +57,17 @@ public sealed class ManagedProcessIdentityPolicy
                 evidence.CommandLineArguments,
                 "--user-data-dir",
                 expected.UserDataDirectory)
-            && HasExpectedExtensionArguments(expected, evidence.CommandLineArguments)
-            && HasArgumentValue(
-                evidence.CommandLineArguments,
-                "--shared-data-dir",
-                expected.SharedDataDirectory);
+            && HasExpectedStorageArguments(expected, evidence.CommandLineArguments);
     }
 
-    private static bool HasExpectedExtensionArguments(
+    private static bool HasExpectedStorageArguments(
         ManagedVsCodeInstanceState expected,
         IReadOnlyList<string> arguments)
         => expected.ExtensionMode == VsCodeExtensionMode.Shared
             ? !HasArgument(arguments, "--extensions-dir")
-            : HasArgumentValue(arguments, "--extensions-dir", expected.ExtensionsDirectory);
+                && !HasArgument(arguments, "--shared-data-dir")
+            : HasArgumentValue(arguments, "--extensions-dir", expected.ExtensionsDirectory)
+                && HasArgumentValue(arguments, "--shared-data-dir", expected.SharedDataDirectory);
 
     private static bool HasArgument(IReadOnlyList<string> arguments, string option)
         => arguments.Any(argument =>

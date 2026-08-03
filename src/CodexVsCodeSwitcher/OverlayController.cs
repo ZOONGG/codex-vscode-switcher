@@ -272,20 +272,6 @@ internal sealed class OverlayController : IDisposable
                 out companion,
                 out Exception? companionFailure))
             {
-                CodexExtensionInstallationInfo? officialCodex =
-                    extensionInstallationLocator.Locate(SelectedExtensionsDirectory);
-                if (officialCodex is null)
-                {
-                    ShowIntegrationError(SelectedExtensionMode == VsCodeExtensionMode.Shared
-                        ? "SharedCodexExtensionMissing"
-                        : "CodexExtensionMissing");
-                    return;
-                }
-
-                companion = companion! with
-                {
-                    OfficialCodexExtensionDirectory = officialCodex.ExtensionPath,
-                };
                 companionSessionStartedAtUtc = DateTimeOffset.UtcNow;
                 companionStateWarningShown = false;
             }
@@ -1693,34 +1679,12 @@ internal sealed class OverlayController : IDisposable
             return;
         }
 
-        ProfileInfo? profile = profiles.FirstOrDefault(item =>
-            item.Name.Equals(state.SelectedProfileId, StringComparison.OrdinalIgnoreCase));
-        if (profile is null)
-        {
-            ShowIntegrationError("ProfileInvalid");
-            return;
-        }
-
         try
         {
-            VsCodeProcessStartSpec plan = launchPlanBuilder.BuildExtensionHostRestart(
-                state.ExecutablePath,
-                state.UserDataDirectory,
-                state.ExtensionsDirectory,
-                state.SharedDataDirectory,
-                profile.DirectoryPath,
-                state.ExtensionMode,
-                settings.CustomCaEnvironmentVariable,
-                settings.CustomCaCertificatePath);
-            _ = managedRuntime.Launch(plan);
+            companionBridge.RequestRestartExtensionHost();
             ShowIntegrationNotice("CodexExtensionHostRestartRequested");
         }
-        catch (Exception exception) when (
-            exception is ArgumentException
-                or IOException
-                or UnauthorizedAccessException
-                or InvalidOperationException
-                or Win32Exception)
+        catch (InvalidOperationException exception)
         {
             logger.Error("Codex extension host restart request failed.", exception);
             ShowIntegrationError("CodexExtensionHostRestartFailed");

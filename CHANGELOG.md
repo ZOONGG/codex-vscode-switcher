@@ -46,8 +46,9 @@
 
 ### Fixed
 
+- Managed Codex now uses VS Code's production application registry; only the local companion bridge is loaded as a development extension. Shared mode no longer overrides `--shared-data-dir`, so application-scoped Codex activates normally and profile chat history loads.
 - “Add profile” now starts onboarding instead of reopening the already-visible Profile Manager.
-- VS Code 1.131 application-scoped Codex installations are now loaded from the validated local `openai.chatgpt` package while dedicated `UserData`, `SharedData`, and `CODEX_HOME` isolation remain intact.
+- VS Code 1.131 application-scoped Codex installations are now loaded from the ordinary production registry while dedicated user data and profile-specific `CODEX_HOME` remain intact.
 - The portable single-file EXE now embeds and atomically provisions its companion extension under application-owned local data, so copying only the EXE to the desktop still enables workspace reporting and automatic Codex sidebar opening.
 - First-launch project selection now persists the project before resuming the original pending profile, keeps the profile ID across the modal picker, and offers Retry/recovery actions without restarting the switcher.
 - Missing or delayed companion/sidebar readiness no longer prevents or invalidates a verified managed VS Code launch.

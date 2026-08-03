@@ -36,6 +36,25 @@ public sealed class WorkspaceAndCompanionLifecycleTests
     }
 
     [Fact]
+    public void ExtensionHostRestart_IsSentThroughTheAuthenticatedCompanionSession()
+    {
+        using var layout = new TestLayout();
+        CompanionBridgeService bridge = CreateBridge(
+            layout,
+            CreateHistory(layout),
+            out ManagedCompanionLaunchOptions launch);
+
+        bridge.RequestRestartExtensionHost();
+
+        string commandPath = Path.Combine(
+            layout.Paths.BridgeDirectory,
+            CompanionBridgeService.CommandFileName);
+        using JsonDocument command = JsonDocument.Parse(File.ReadAllText(commandPath));
+        Assert.Equal("restartExtensionHost", command.RootElement.GetProperty("action").GetString());
+        Assert.Equal(launch.SessionId, command.RootElement.GetProperty("sessionId").GetString());
+    }
+
+    [Fact]
     public void ManuallyOpenedFolder_IsReportedStoredAndRestoredAfterRestart()
     {
         using var layout = new TestLayout();
@@ -152,7 +171,7 @@ public sealed class WorkspaceAndCompanionLifecycleTests
     }
 
     [Fact]
-    public void CompanionLaunch_IsManagedOnlyAndCarriesNoContentOrCredentialFields()
+    public void CompanionLaunch_LoadsOnlyTheBridgeAsDevelopmentExtension()
     {
         using var layout = new TestLayout();
         string executable = Path.Combine(layout.LocalAppData, "Code.exe");
@@ -186,14 +205,10 @@ public sealed class WorkspaceAndCompanionLifecycleTests
             profile,
             null);
 
-        int[] developmentPathIndexes = managed.Arguments
-            .Select((argument, index) => (argument, index))
-            .Where(static item => item.argument == "--extensionDevelopmentPath")
-            .Select(static item => item.index)
-            .ToArray();
-        Assert.Equal(2, developmentPathIndexes.Length);
-        Assert.Equal(companion, managed.Arguments[developmentPathIndexes[0] + 1]);
-        Assert.Equal(officialCodex, managed.Arguments[developmentPathIndexes[1] + 1]);
+        int developmentPathIndex = managed.Arguments.IndexOf("--extensionDevelopmentPath");
+        Assert.True(developmentPathIndex >= 0);
+        Assert.Equal(companion, managed.Arguments[developmentPathIndex + 1]);
+        Assert.DoesNotContain(officialCodex, managed.Arguments);
         Assert.Contains(CompanionBridgeService.BridgePathEnvironmentVariable, managed.EnvironmentOverrides.Keys);
         Assert.DoesNotContain("--extensionDevelopmentPath", ordinary.Arguments);
         Assert.DoesNotContain(CompanionBridgeService.BridgePathEnvironmentVariable, ordinary.EnvironmentOverrides.Keys);

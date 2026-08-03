@@ -98,7 +98,7 @@ public sealed class ManagedVsCodeIntegrationTests
         Assert.DoesNotContain("--extensions-dir", plan.Arguments);
         Assert.DoesNotContain(Path.Combine(temp.Path, "extensions"), plan.Arguments);
         AssertArgumentValue(plan.Arguments, "--user-data-dir", Path.Combine(temp.Path, "data"));
-        AssertArgumentValue(plan.Arguments, "--shared-data-dir", Path.Combine(temp.Path, "shared-data"));
+        Assert.DoesNotContain("--shared-data-dir", plan.Arguments);
     }
 
     [Fact]
@@ -228,8 +228,6 @@ public sealed class ManagedVsCodeIntegrationTests
                 state.ExecutablePath,
                 "--user-data-dir",
                 state.UserDataDirectory,
-                "--shared-data-dir",
-                state.SharedDataDirectory,
                 "--new-window",
             ]);
         var isolatedEvidence = sharedEvidence with
@@ -245,6 +243,30 @@ public sealed class ManagedVsCodeIntegrationTests
         var policy = new ManagedProcessIdentityPolicy();
         Assert.True(policy.IsManagedRoot(state, sharedEvidence));
         Assert.False(policy.IsManagedRoot(state, isolatedEvidence));
+    }
+
+    [Fact]
+    public void ManagedIdentity_RejectsSharedModeWithDedicatedSharedDataArgument()
+    {
+        using var temp = new TempDirectory();
+        ManagedVsCodeInstanceState state = State(temp.Path, processId: 42) with
+        {
+            ExtensionMode = VsCodeExtensionMode.Shared,
+        };
+        var evidence = new ProcessIdentityEvidence(
+            42,
+            state.RootProcessStartTimeUtc,
+            state.ExecutablePath,
+            [
+                state.ExecutablePath,
+                "--user-data-dir",
+                state.UserDataDirectory,
+                "--shared-data-dir",
+                state.SharedDataDirectory,
+                "--new-window",
+            ]);
+
+        Assert.False(new ManagedProcessIdentityPolicy().IsManagedRoot(state, evidence));
     }
 
     [Fact]

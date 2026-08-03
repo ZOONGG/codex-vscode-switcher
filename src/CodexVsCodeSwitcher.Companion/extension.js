@@ -134,6 +134,8 @@ async function pollCommandFile() {
         await openCodexWithRetry();
     } else if (command.action === 'configureShortcut') {
         await vscode.commands.executeCommand('workbench.action.openGlobalKeybindings');
+    } else if (command.action === 'restartExtensionHost') {
+        await vscode.commands.executeCommand('workbench.action.restartExtensionHost');
     }
 }
 

@@ -19,11 +19,11 @@ The production controller uses the unavailable usage provider, so status UI rema
 
 `VsCodeLaunchPlanBuilder` creates an argument list rather than a shell command. `ProcessCommandRunner` uses `UseShellExecute = false` and `ProcessStartInfo.ArgumentList`. Only the managed launch plan contains a `CODEX_HOME` environment override.
 
-Every launch supplies the exact dedicated `--user-data-dir`, `--shared-data-dir`, and `--new-window`. Shared extension mode is the default and omits `--extensions-dir`, so both VS Code environments execute the same installed Codex backend path. Isolated mode supplies the exact dedicated `--extensions-dir`. Workspace input is either an existing folder, an existing `.code-workspace`, or null.
+Every launch supplies the exact dedicated `--user-data-dir` and `--new-window`. Shared extension mode is the default and omits both `--extensions-dir` and `--shared-data-dir`, so application-scoped Codex remains enabled through VS Code's production registry. Isolated mode supplies the exact dedicated `--extensions-dir` and `--shared-data-dir`. Workspace input is either an existing folder, an existing `.code-workspace`, or null.
 
 `ProcessStartInfo` retains the complete parent environment and applies only process-local application overrides. `CODEX_HOME` is always overridden. An explicitly configured existing CA path may additionally override only `CODEX_CA_CERTIFICATE` or `SSL_CERT_FILE`; values are never logged and no global environment is changed.
 
-Managed launches pass the application-owned companion as one `--extensionDevelopmentPath` and, when found, the exact validated local `openai.chatgpt` package as a second path. The latter is required because VS Code 1.131 hides application-scoped extensions from a dedicated `--user-data-dir`; it does not copy or register the package and leaves ordinary extension files unchanged. Four process-local `CODEX_VSCODE_SWITCHER_*` values carry the bridge directory, random session ID, automatic-open flag, and dedicated user-data path. These arguments and values are absent from ordinary VS Code launches.
+Managed launches pass only the application-owned companion as `--extensionDevelopmentPath`. The official `openai.chatgpt` package is deliberately not a development extension: VS Code loads it from the production application registry, which preserves its normal authentication and chat behavior. Four process-local `CODEX_VSCODE_SWITCHER_*` values carry the bridge directory, random session ID, automatic-open flag, and dedicated user-data path. These arguments and values are absent from ordinary VS Code launches.
 
 ## Workspace bridge
 
@@ -51,7 +51,7 @@ If the new launch fails after a previous managed instance closed, one rollback l
 
 ## Extension and settings
 
-`CodexExtensionManager` scans the selected extension root for `openai.chatgpt-*` and reads only the extension version. Before a package is admitted as a development path, `CodexExtensionInstallationLocator` rejects reparse points, bounds the manifest read, and requires the exact `openai.chatgpt` publisher/name identity. Shared mode is read-only and never installs during startup or through the switcher. Explicit install uses the configured VS Code executable only in isolated mode.
+`CodexExtensionManager` scans the selected extension root for `openai.chatgpt-*` and reads only the extension version. Shared mode is read-only and never installs during startup or through the switcher. Explicit install uses the configured VS Code executable only in isolated mode. The official package is never passed as a development-extension path.
 
 Network diagnostics use credential-free probes for DNS, TCP 443, TLS, HTTPS, secure WebSocket capability, system proxy detection, custom CA availability, and `codex.exe --version`. HTTP 401/403 proves network reachability and is reported as authentication after successful networking. Reports contain only allowlisted paths, hashes, process parentage/start times, setting names, environment variable names, and sanitized errors.
 

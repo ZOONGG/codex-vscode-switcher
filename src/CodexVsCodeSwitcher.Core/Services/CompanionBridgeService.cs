@@ -180,6 +180,8 @@ public sealed class CompanionBridgeService
 
     public void RequestConfigureShortcut() => WriteCommand("configureShortcut");
 
+    public void RequestRestartExtensionHost() => WriteCommand("restartExtensionHost");
+
     private bool IsValidEnvelope(CompanionBridgeState? state)
         => state is not null
             && state.ProtocolVersion == ProtocolVersion

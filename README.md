@@ -11,16 +11,17 @@ The managed instance always launches with:
 ```text
 Code.exe
   --user-data-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeData"
-  --shared-data-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeSharedData"
   --new-window
   [optional folder or .code-workspace]
 ```
 
 By default, **Use my existing VS Code extensions** is enabled, so no
 `--extensions-dir` argument is passed and VS Code uses `%USERPROFILE%\.vscode\extensions`.
-Only extension installation files are shared; user data, settings, storage, cookies,
-login state, and `CODEX_HOME` remain isolated. Advanced isolated mode passes
-`--extensions-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeExtensions"`.
+The normal VS Code application registry is retained so application-scoped extensions
+such as Codex remain enabled. User data, settings, cookies, and `CODEX_HOME` remain
+isolated. Advanced isolated mode passes both
+`--extensions-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeExtensions"` and the
+dedicated `--shared-data-dir` value.
 
 `CODEX_HOME` is added only to `ProcessStartInfo.Environment` for that managed launch and points directly to the selected directory under `%USERPROFILE%\.codex-vscode-profiles`. The switcher never copies a profile or replaces `auth.json`.
 
@@ -56,7 +57,7 @@ A window is managed only when all of the following remain valid:
 
 - the persisted root PID and process start time match;
 - the executable path exactly matches the configured/detected VS Code executable;
-- the root command line contains the exact dedicated `--user-data-dir` and `--shared-data-dir`, plus either no `--extensions-dir` in shared mode or the exact dedicated value in isolated mode;
+- the root command line contains the exact dedicated `--user-data-dir`; shared mode rejects both storage override flags, while isolated mode requires the exact dedicated `--extensions-dir` and `--shared-data-dir` values;
 - the window belongs to the launched root process or a verified descendant;
 - the HWND is a visible top-level window owned by that verified process tree.
 
@@ -98,7 +99,7 @@ On first launch, **Which project should Codex open?** lets the user choose a pro
 
 ## Codex extension and workspaces
 
-The managed environment detects the official Marketplace extension `openai.chatgpt` in the active extension directory. Shared mode never installs, updates, removes, or changes ordinary extension files or enablement records. Because VS Code 1.131 marks Codex as application-scoped, the managed launch adds the validated local package as a second development-extension path; dedicated `UserData`, `SharedData`, and `CODEX_HOME` remain isolated. Installation occurs only after an explicit action in isolated mode and targets only the dedicated extension directory.
+The managed environment detects the official Marketplace extension `openai.chatgpt` in the active extension directory. Shared mode never installs, updates, removes, or changes ordinary extension files or enablement records. Because VS Code 1.131 marks Codex as application-scoped, shared mode retains VS Code's normal application registry while keeping dedicated user data and profile-specific `CODEX_HOME`. The official OpenAI package therefore runs as a production extension. Installation occurs only after an explicit action in isolated mode and targets only the dedicated extension directory.
 
 Settings includes sanitized DNS/TCP/TLS/HTTPS/WebSocket/backend diagnostics, a safe
 regular-vs-managed comparison, an allowlist-only proxy settings copy, optional
@@ -107,7 +108,7 @@ extension-host restart, and a reset limited to the switcher's diagnostic cache.
 
 The dedicated `User\settings.json` is updated atomically while preserving unrelated valid settings. `chatgpt.openOnStartup` is configured only there.
 
-The switcher bundles a lightweight companion extension only for the dedicated Codex VS Code launch. It receives an application-owned bridge path through process-local environment variables, reports only sanitized workspace/UI state through atomic JSON under `%LOCALAPPDATA%\CodexVsCodeSwitcher\bridge`, and never opens a network port. Ordinary VS Code is not installed or launched with this companion.
+The switcher bundles a lightweight companion extension only for the dedicated Codex VS Code launch. It is the sole development extension; the official Codex extension remains in production mode. The companion receives an application-owned bridge path through process-local environment variables, reports only sanitized workspace/UI state through atomic JSON under `%LOCALAPPDATA%\CodexVsCodeSwitcher\bridge`, and never opens a network port. Ordinary VS Code is not installed or launched with this companion.
 
 The companion files are embedded in the portable EXE and atomically provisioned into `%LOCALAPPDATA%\CodexVsCodeSwitcher\companion-extension`. The EXE therefore remains fully functional when copied by itself; the adjacent `companion-extension` publish folder is only a transparent packaging fallback.
 
