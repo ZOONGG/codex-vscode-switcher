@@ -130,9 +130,26 @@ public partial class App : Application
             var workspaceHistory = new WorkspaceHistoryService(
                 paths.LastWorkspaceMetadataFile,
                 protectedPaths);
+            string companionExtensionDirectory;
+            try
+            {
+                companionExtensionDirectory = new BundledCompanionExtensionProvisioner(protectedPaths)
+                    .Provision(paths.CompanionExtensionDirectory);
+            }
+            catch (Exception exception) when (
+                exception is IOException
+                    or UnauthorizedAccessException
+                    or InvalidOperationException)
+            {
+                logger.Error("Could not provision the bundled companion extension.", exception);
+                companionExtensionDirectory = Path.Combine(
+                    AppContext.BaseDirectory,
+                    "companion-extension");
+            }
+
             var companionBridge = new CompanionBridgeService(
                 paths.BridgeDirectory,
-                Path.Combine(AppContext.BaseDirectory, "companion-extension"),
+                companionExtensionDirectory,
                 protectedPaths,
                 workspaceHistory);
             backupMaintenance.CleanupRetention();

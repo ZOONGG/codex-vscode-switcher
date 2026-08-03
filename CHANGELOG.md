@@ -44,6 +44,7 @@
 
 ### Fixed
 
+- The portable single-file EXE now embeds and atomically provisions its companion extension under application-owned local data, so copying only the EXE to the desktop still enables workspace reporting and automatic Codex sidebar opening.
 - First-launch project selection now persists the project before resuming the original pending profile, keeps the profile ID across the modal picker, and offers Retry/recovery actions without restarting the switcher.
 - Missing or delayed companion/sidebar readiness no longer prevents or invalidates a verified managed VS Code launch.
 - Same-project ordinary VS Code windows remain outside managed identity and are covered by a two-window real smoke test.

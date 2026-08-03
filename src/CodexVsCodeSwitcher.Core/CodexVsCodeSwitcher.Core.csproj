@@ -12,4 +12,12 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.22" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\CodexVsCodeSwitcher.Companion\package.json"
+                      LogicalName="CodexVsCodeSwitcher.Companion.package.json" />
+    <EmbeddedResource Include="..\CodexVsCodeSwitcher.Companion\extension.js"
+                      LogicalName="CodexVsCodeSwitcher.Companion.extension.js" />
+    <EmbeddedResource Include="..\CodexVsCodeSwitcher.Companion\companion-core.js"
+                      LogicalName="CodexVsCodeSwitcher.Companion.companion-core.js" />
+  </ItemGroup>
 </Project>

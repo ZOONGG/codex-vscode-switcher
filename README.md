@@ -97,6 +97,8 @@ The dedicated `User\settings.json` is updated atomically while preserving unrela
 
 The switcher bundles a lightweight companion extension only for the dedicated Codex VS Code launch. It receives an application-owned bridge path through process-local environment variables, reports only sanitized workspace/UI state through atomic JSON under `%LOCALAPPDATA%\CodexVsCodeSwitcher\bridge`, and never opens a network port. Ordinary VS Code is not installed or launched with this companion.
 
+The companion files are embedded in the portable EXE and atomically provisioned into `%LOCALAPPDATA%\CodexVsCodeSwitcher\companion-extension`. The EXE therefore remains fully functional when copied by itself; the adjacent `companion-extension` publish folder is only a transparent packaging fallback.
+
 Opening a folder or `.code-workspace` inside Codex VS Code automatically updates one global current project shared by all Codex account profiles. The current project reopens after profile switches and restarts. Up to ten deduplicated recent projects are available in Settings and the tray; missing projects remain visible until the user chooses another folder, opens an empty window, or removes the entry.
 
 After a verified managed window appears, the companion activates the official extension and invokes `chatgpt.openSidebar` with bounded retries. **Open Codex automatically** is enabled by default. `Ctrl+Alt+C` and the compact status-bar item **Codex** reopen and focus the sidebar; an existing dedicated keybinding is reported and left unchanged.
