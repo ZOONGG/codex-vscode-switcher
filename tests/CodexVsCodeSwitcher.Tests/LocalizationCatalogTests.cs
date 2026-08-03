@@ -108,4 +108,20 @@ public sealed class LocalizationCatalogTests
         Assert.Equal("Open Codex automatically", LocalizationCatalog.Text(LanguagePreference.English, "LaunchCodexSidebar"));
         Assert.Equal("Автоматически открывать Codex", LocalizationCatalog.Text(LanguagePreference.Russian, "LaunchCodexSidebar"));
     }
+
+    [Fact]
+    public void ProjectChooserAndRecoveryWordingMatchesProductCopy()
+    {
+        Assert.Equal("Which project should Codex open?", LocalizationCatalog.Text(LanguagePreference.English, "FirstLaunchProjectTitle"));
+        Assert.Equal("Choose project folder", LocalizationCatalog.Text(LanguagePreference.English, "ChooseFolder"));
+        Assert.Equal("Choose .code-workspace file", LocalizationCatalog.Text(LanguagePreference.English, "ChooseWorkspaceFile"));
+        Assert.Equal("Open without a project", LocalizationCatalog.Text(LanguagePreference.English, "OpenEmptyWindow"));
+
+        Assert.Equal("Какой проект открыть?", LocalizationCatalog.Text(LanguagePreference.Russian, "FirstLaunchProjectTitle"));
+        Assert.Equal("Выбрать папку проекта", LocalizationCatalog.Text(LanguagePreference.Russian, "ChooseFolder"));
+        Assert.Equal("Выбрать файл проекта .code-workspace", LocalizationCatalog.Text(LanguagePreference.Russian, "ChooseWorkspaceFile"));
+        Assert.Equal("Открыть без проекта", LocalizationCatalog.Text(LanguagePreference.Russian, "OpenEmptyWindow"));
+        Assert.Equal("Повторить запуск", LocalizationCatalog.Text(LanguagePreference.Russian, "RetryLaunch"));
+        Assert.Equal("Сбросить состояние запуска", LocalizationCatalog.Text(LanguagePreference.Russian, "ResetLaunchState"));
+    }
 }

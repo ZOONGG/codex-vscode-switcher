@@ -14,6 +14,28 @@ public sealed class WorkspaceAndCompanionLifecycleTests
     };
 
     [Fact]
+    public void MissingBundledCompanion_IsARecoverableLaunchWarning()
+    {
+        using var layout = new TestLayout();
+        string missingExtension = Path.Combine(layout.LocalAppData, "missing-companion");
+        var bridge = new CompanionBridgeService(
+            layout.Paths.BridgeDirectory,
+            missingExtension,
+            layout.ProtectedPaths,
+            CreateHistory(layout));
+
+        bool available = bridge.TryBeginSession(
+            openCodexAutomatically: true,
+            out ManagedCompanionLaunchOptions? launch,
+            out Exception? failure);
+
+        Assert.False(available);
+        Assert.Null(launch);
+        Assert.IsType<DirectoryNotFoundException>(failure);
+        Assert.False(Directory.Exists(layout.Paths.BridgeDirectory));
+    }
+
+    [Fact]
     public void ManuallyOpenedFolder_IsReportedStoredAndRestoredAfterRestart()
     {
         using var layout = new TestLayout();

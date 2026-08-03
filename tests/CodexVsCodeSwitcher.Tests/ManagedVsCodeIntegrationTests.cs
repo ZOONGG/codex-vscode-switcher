@@ -161,6 +161,35 @@ public sealed class ManagedVsCodeIntegrationTests
     }
 
     [Fact]
+    public void SameProjectInOrdinaryVsCode_IsNotAdoptedAsManagedInstance()
+    {
+        using var temp = new TempDirectory();
+        string project = Path.Combine(temp.Path, "same project");
+        Directory.CreateDirectory(project);
+        ManagedVsCodeInstanceState state = State(temp.Path, processId: 42) with
+        {
+            WorkspacePath = project,
+            ExtensionMode = VsCodeExtensionMode.Shared,
+        };
+        var ordinary = new ProcessIdentityEvidence(
+            84,
+            state.RootProcessStartTimeUtc,
+            state.ExecutablePath,
+            [
+                state.ExecutablePath,
+                "--user-data-dir",
+                Path.Combine(temp.Path, "ordinary-data"),
+                "--new-window",
+                project,
+            ]);
+
+        var policy = new ManagedProcessIdentityPolicy();
+        Assert.False(policy.IsManagedRoot(state, ordinary));
+        Assert.False(policy.IsExactManagedProcessCandidate(state, ordinary));
+        Assert.Equal(project, state.WorkspacePath);
+    }
+
+    [Fact]
     public void ManagedIdentity_AcceptsExactExecutableArgumentsPidAndStartTime()
     {
         using var temp = new TempDirectory();

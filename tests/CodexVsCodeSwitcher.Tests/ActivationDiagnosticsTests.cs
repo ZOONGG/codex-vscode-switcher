@@ -37,7 +37,7 @@ public sealed class ActivationDiagnosticsTests
             profileId: alpha
             workspacePath: D:\Work\sample.code-workspace
             process: 42@1970-01-01T00:00:00.0000000+00:00
-            timeoutStage: window-detection
+            stage: window-detection
             exceptionType: TimeoutException
             message: access_token=<redacted> for <redacted-email>
             """,

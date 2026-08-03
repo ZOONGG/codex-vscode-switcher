@@ -15,9 +15,11 @@ $userData = Join-Path $temporaryRoot "user-data"
 $sharedData = Join-Path $temporaryRoot "shared-data"
 $bridge = Join-Path $temporaryRoot "bridge"
 $testFolder = Join-Path $temporaryRoot "test-project"
+$ordinaryUserData = Join-Path $temporaryRoot "ordinary-user-data"
+$ordinarySharedData = Join-Path $temporaryRoot "ordinary-shared-data"
 $profileA = Join-Path $temporaryRoot "profile-a"
 $profileB = Join-Path $temporaryRoot "profile-b"
-New-Item -ItemType Directory -Path $userData, $sharedData, $bridge, $testFolder, $profileA, $profileB | Out-Null
+New-Item -ItemType Directory -Path $userData, $sharedData, $bridge, $testFolder, $ordinaryUserData, $ordinarySharedData, $profileA, $profileB | Out-Null
 $stateFile = Join-Path $bridge "workspace-state.json"
 $commandFile = Join-Path $bridge "command-request.json"
 $ordinaryBefore = @(Get-CimInstance Win32_Process -Filter "Name = 'Code.exe'" | Select-Object -ExpandProperty ProcessId)
@@ -31,6 +33,55 @@ function Get-SmokeProcesses {
         $_.CommandLine.Contains($sharedData, [StringComparison]::OrdinalIgnoreCase) -and
         $_.CommandLine.Contains($companion, [StringComparison]::OrdinalIgnoreCase)
     })
+}
+
+function Get-DisposableOrdinaryProcesses {
+    @(Get-CimInstance Win32_Process -Filter "Name = 'Code.exe'" | Where-Object {
+        -not [string]::IsNullOrWhiteSpace($_.ExecutablePath) -and
+        -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
+        [IO.Path]::GetFullPath($_.ExecutablePath).Equals($executable, [StringComparison]::OrdinalIgnoreCase) -and
+        $_.CommandLine.Contains($ordinaryUserData, [StringComparison]::OrdinalIgnoreCase) -and
+        $_.CommandLine.Contains($ordinarySharedData, [StringComparison]::OrdinalIgnoreCase) -and
+        -not $_.CommandLine.Contains($companion, [StringComparison]::OrdinalIgnoreCase)
+    })
+}
+
+function Start-DisposableOrdinaryWindow {
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $executable
+    $startInfo.WorkingDirectory = [IO.Path]::GetDirectoryName($executable)
+    $startInfo.UseShellExecute = $false
+    foreach ($argument in @(
+        "--user-data-dir", $ordinaryUserData,
+        "--shared-data-dir", $ordinarySharedData,
+        "--disable-extensions", "--disable-workspace-trust", "--new-window", $testFolder)) {
+        $startInfo.ArgumentList.Add($argument)
+    }
+    $root = [Diagnostics.Process]::Start($startInfo)
+    if ($null -eq $root) { throw "The disposable ordinary VS Code process could not be started." }
+
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
+    while ([DateTimeOffset]::UtcNow -lt $deadline) {
+        $window = Get-DisposableOrdinaryProcesses | ForEach-Object {
+            Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
+        } | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+        if ($null -ne $window) { return $window }
+        Start-Sleep -Milliseconds 250
+    }
+    throw "The disposable ordinary VS Code window did not appear within $TimeoutSeconds seconds."
+}
+
+function Close-DisposableOrdinaryWindow {
+    param($Window)
+    if ($null -ne $Window -and -not $Window.HasExited -and -not $Window.CloseMainWindow()) {
+        throw "The disposable ordinary VS Code window rejected graceful close."
+    }
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
+    while ([DateTimeOffset]::UtcNow -lt $deadline) {
+        if ((Get-DisposableOrdinaryProcesses).Count -eq 0) { return }
+        Start-Sleep -Milliseconds 250
+    }
+    throw "The disposable ordinary VS Code processes did not close gracefully."
 }
 
 function Wait-ForBridgeState {
@@ -126,8 +177,18 @@ function Close-SmokeCycle {
 }
 
 $cycles = @()
+$ordinaryWindow = $null
 try {
+    $ordinaryWindow = Start-DisposableOrdinaryWindow
     $first = Start-SmokeCycle -ProfileHome $profileA -WorkspacePath $testFolder
+    $managedWindow = Get-SmokeProcesses | ForEach-Object {
+        Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
+    } | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+    if ($null -eq $managedWindow) { throw "The managed window was not available after the bridge report." }
+    if ($managedWindow.Id -eq $ordinaryWindow.Id -or $managedWindow.MainWindowHandle -eq $ordinaryWindow.MainWindowHandle) {
+        throw "The managed launch adopted the disposable ordinary VS Code window."
+    }
+    if ($ordinaryWindow.HasExited) { throw "The disposable ordinary VS Code window was closed by managed launch." }
     $remembered = [IO.Path]::GetFullPath($first.State.workspacePath)
     $cycles += [pscustomobject]@{ Stage = "initial"; Workspace = $remembered; Sidebar = $first.State.sidebarStatus }
     Close-SmokeCycle $first
@@ -140,6 +201,10 @@ try {
     $cycles += [pscustomobject]@{ Stage = "profile-switch"; Workspace = $third.State.workspacePath; Sidebar = $third.State.sidebarStatus }
     Close-SmokeCycle $third
 
+    if ($ordinaryWindow.HasExited) { throw "The ordinary same-project window did not survive managed cycles." }
+    Close-DisposableOrdinaryWindow $ordinaryWindow
+    $ordinaryWindow = $null
+
     $ordinaryAfter = @(Get-CimInstance Win32_Process -Filter "Name = 'Code.exe'" | Select-Object -ExpandProperty ProcessId)
     if (@(Compare-Object $ordinaryBefore $ordinaryAfter).Count -ne 0) { throw "The ordinary VS Code process set changed." }
     [pscustomobject]@{
@@ -147,6 +212,9 @@ try {
         WorkspaceRestore = $true
         ProfileSwitchPreservedWorkspace = $true
         SidebarCommandAccepted = $true
+        SameProjectOpenedInTwoDistinctWindows = $true
+        ManagedIdentityIgnoredProjectTitle = $true
+        RememberedProjectRelaunchSkippedChooser = $true
         OrdinaryVsCodeUntouched = $true
         Cycles = $cycles
     } | ConvertTo-Json -Depth 4
@@ -163,7 +231,16 @@ finally {
     while ([DateTimeOffset]::UtcNow -lt $closeDeadline -and (Get-SmokeProcesses).Count -gt 0) {
         Start-Sleep -Milliseconds 250
     }
-    if ((Get-SmokeProcesses).Count -eq 0 -and (Test-Path -LiteralPath $temporaryRoot)) {
+    if ($null -ne $ordinaryWindow -and -not $ordinaryWindow.HasExited) {
+        [void]$ordinaryWindow.CloseMainWindow()
+    }
+    $ordinaryCloseDeadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
+    while ([DateTimeOffset]::UtcNow -lt $ordinaryCloseDeadline -and (Get-DisposableOrdinaryProcesses).Count -gt 0) {
+        Start-Sleep -Milliseconds 250
+    }
+    if ((Get-SmokeProcesses).Count -eq 0 -and
+        (Get-DisposableOrdinaryProcesses).Count -eq 0 -and
+        (Test-Path -LiteralPath $temporaryRoot)) {
         $resolved = [IO.Path]::GetFullPath($temporaryRoot)
         $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
         if ($resolved.StartsWith($tempBase, [StringComparison]::OrdinalIgnoreCase)) {
