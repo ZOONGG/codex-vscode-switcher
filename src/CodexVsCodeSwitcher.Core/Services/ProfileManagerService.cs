@@ -50,7 +50,6 @@ public sealed class ProfileManagerService
             .Where(static profile => !profile.Hidden)
             .OrderBy(static profile => profile.Order)
             .ThenBy(static profile => profile.DisplayName, StringComparer.CurrentCultureIgnoreCase)
-            .Take(12)
             .ToArray();
     }
 
@@ -87,6 +86,11 @@ public sealed class ProfileManagerService
 
         if (Directory.Exists(directory))
         {
+            if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException("A profile directory cannot be a reparse point.");
+            }
+
             if (File.Exists(Path.Combine(directory, "auth.json")))
             {
                 throw new InvalidOperationException("A profile with that directory name already exists.");

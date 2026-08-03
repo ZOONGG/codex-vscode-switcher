@@ -38,6 +38,18 @@ The following roots remain protected:
 %LOCALAPPDATA%\CodexProfileOverlay
 ```
 
+## Add or replace accounts
+
+Use **Add profile** from the overlay, Settings, or Profile Manager. Enter any local
+profile name; the switcher creates a new isolated `CODEX_HOME` and opens the official
+Codex login in a separate terminal. After login succeeds, the new account appears in
+the profile list and can be launched immediately. Profiles are discovered dynamically;
+the application contains no bundled user names, accounts, authentication files, or
+fixed four-account limit.
+
+Removing a non-active profile moves its local directory into the application-owned
+`removed-profiles` folder so it can be recovered. It never changes the external account.
+
 ## Managed-instance identity
 
 A window is managed only when all of the following remain valid:

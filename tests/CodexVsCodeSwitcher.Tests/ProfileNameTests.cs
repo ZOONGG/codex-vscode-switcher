@@ -5,9 +5,9 @@ namespace CodexVsCodeSwitcher.Tests;
 public sealed class ProfileNameTests
 {
     [Theory]
-    [InlineData("zonng")]
-    [InlineData("grille")]
-    [InlineData("ormazamoh")]
+    [InlineData("alpha")]
+    [InlineData("beta")]
+    [InlineData("gamma")]
     [InlineData("work-profile")]
     public void IsValid_AcceptsSafeDirectoryNames(string value)
     {

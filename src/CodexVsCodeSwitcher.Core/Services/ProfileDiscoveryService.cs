@@ -25,7 +25,6 @@ public sealed class ProfileDiscoveryService
         return auditService.AuditProfiles()
             .Select(CreateProfileInfo)
             .OrderBy(static profile => profile.Name, StringComparer.CurrentCultureIgnoreCase)
-            .Take(12)
             .ToArray();
     }
 

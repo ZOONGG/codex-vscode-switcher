@@ -15,7 +15,7 @@ public sealed class ProjectLaunchContinuationTests
             layout.Paths.LastWorkspaceMetadataFile,
             layout.ProtectedPaths);
         var flow = new ProjectLaunchContinuation(layout.ProtectedPaths);
-        PendingProjectActivation pending = flow.Begin("grille");
+        PendingProjectActivation pending = flow.Begin("alpha");
         ResolvedProjectActivation selection = flow.SelectFolder(pending, project);
         var order = new List<string>();
         string? activatedProfile = null;
@@ -35,7 +35,7 @@ public sealed class ProjectLaunchContinuationTests
                 return Task.CompletedTask;
             });
 
-        Assert.Equal("grille", activatedProfile);
+        Assert.Equal("alpha", activatedProfile);
         Assert.Equal(["saved", "activated"], order);
         Assert.Equal(Path.GetFullPath(project), history.ReadSnapshot().CurrentProject?.Path);
         Assert.Contains(history.ReadSnapshot().RecentProjects, item =>
@@ -52,7 +52,7 @@ public sealed class ProjectLaunchContinuationTests
             layout.Paths.LastWorkspaceMetadataFile,
             layout.ProtectedPaths);
         var flow = new ProjectLaunchContinuation(layout.ProtectedPaths);
-        ResolvedProjectActivation selection = flow.SelectFolder(flow.Begin("grille"), project);
+        ResolvedProjectActivation selection = flow.SelectFolder(flow.Begin("alpha"), project);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => flow.ResumeAsync(
             selection,
@@ -69,14 +69,14 @@ public sealed class ProjectLaunchContinuationTests
         string project = Path.Combine(layout.UserProfile, "проект сайта с пробелами");
         Directory.CreateDirectory(project);
         ResolvedProjectActivation selection = new ProjectLaunchContinuation(layout.ProtectedPaths)
-            .SelectFolder(new PendingProjectActivation("grille"), project);
+            .SelectFolder(new PendingProjectActivation("alpha"), project);
 
         VsCodeProcessStartSpec plan = new VsCodeLaunchPlanBuilder().Build(
             Path.Combine(layout.LocalAppData, "Code.exe"),
             layout.Paths.VsCodeUserDataDirectory,
             layout.Paths.VsCodeExtensionsDirectory,
             layout.Paths.VsCodeSharedDataDirectory,
-            Path.Combine(layout.Paths.ProfilesDirectory, "grille"),
+            Path.Combine(layout.Paths.ProfilesDirectory, "alpha"),
             selection.ProjectPath,
             VsCodeExtensionMode.Shared);
 
@@ -91,7 +91,7 @@ public sealed class ProjectLaunchContinuationTests
     {
         using var layout = new TestLayout();
         var flow = new ProjectLaunchContinuation(layout.ProtectedPaths);
-        ResolvedProjectActivation selection = flow.OpenWithoutProject(flow.Begin("grille"));
+        ResolvedProjectActivation selection = flow.OpenWithoutProject(flow.Begin("alpha"));
         string? activated = null;
 
         await flow.ResumeAsync(
@@ -103,6 +103,6 @@ public sealed class ProjectLaunchContinuationTests
                 return Task.CompletedTask;
             });
 
-        Assert.Equal("grille", activated);
+        Assert.Equal("alpha", activated);
     }
 }

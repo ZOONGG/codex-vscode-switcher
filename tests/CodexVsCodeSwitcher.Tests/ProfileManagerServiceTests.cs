@@ -106,6 +106,20 @@ public sealed class ProfileManagerServiceTests
         Assert.Equal<string[]>(["beta", "alpha"], service.ListProfiles().Select(static profile => profile.Name).ToArray());
     }
 
+    [Fact]
+    public void ListProfiles_DoesNotHideProfilesAfterTheTwelfthAccount()
+    {
+        using var temp = new TestLayout();
+        for (int index = 0; index < 15; index++)
+        {
+            temp.AddProfile($"profile-{index:00}", "auth");
+        }
+
+        var service = CreateService(temp);
+
+        Assert.Equal(15, service.ListProfiles().Count);
+    }
+
     private static ProfileManagerService CreateService(TestLayout temp)
     {
         return new ProfileManagerService(

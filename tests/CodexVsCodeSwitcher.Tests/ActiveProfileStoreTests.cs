@@ -10,9 +10,9 @@ public sealed class ActiveProfileStoreTests
         using var temp = new TempDirectory();
         var store = new ActiveProfileStore(Path.Combine(temp.Path, "active-profile.txt"));
 
-        store.Write("zonng");
+        store.Write("alpha");
 
-        Assert.Equal("zonng", store.Read());
+        Assert.Equal("alpha", store.Read());
     }
 
     [Fact]

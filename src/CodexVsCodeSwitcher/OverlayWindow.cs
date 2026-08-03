@@ -571,7 +571,14 @@ internal sealed class OverlayWindow : Window
         panel.Children.Add(CreatePopupCommand(Localizer?["ManageProfiles"] ?? "Manage profiles", OnManageProfiles));
         panel.Children.Add(CreatePopupCommand(Localizer?["Settings"] ?? "Settings", OnOpenSettings));
         panel.Children.Add(CreatePopupCommand(Localizer?["HideSwitcher"] ?? "Hide switcher", OnHideOverlay));
-        border.Child = panel;
+        border.Child = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            MaxHeight = 420,
+            CanContentScroll = true,
+            Content = panel,
+        };
         return border;
     }
 

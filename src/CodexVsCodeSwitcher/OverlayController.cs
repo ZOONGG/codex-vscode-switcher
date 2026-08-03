@@ -192,7 +192,7 @@ internal sealed class OverlayController : IDisposable
             OnOpenApplicationDataFolder = () => OpenFolder(paths.ApplicationDataDirectory),
             OnOpenSettings = ShowSettingsWindow,
             OnManageProfiles = ShowProfileManager,
-            OnAddProfile = ShowProfileManager,
+            OnAddProfile = ShowAddProfile,
             OnHideOverlay = HideOverlay,
             OnExit = () => Application.Current.Shutdown(),
             OnSettingsChanged = SaveSettings,
@@ -766,7 +766,7 @@ internal sealed class OverlayController : IDisposable
             SaveSettings,
             RefreshStatusIndicators,
             RefreshUsageForProfileAsync,
-            ShowProfileManager,
+            ShowAddProfile,
             ShowProfileManager,
             () => OpenFolder(settings.CodexProfileRoot),
             () => OpenFolder(paths.RemovedProfilesDirectory),
@@ -824,7 +824,7 @@ internal sealed class OverlayController : IDisposable
             profiles,
             activeProfileStore.Read(),
             localizer,
-            ShowProfileManager,
+            ShowAddProfile,
             RenameDisplayName,
             RemoveProfile,
             ReorderProfiles,
@@ -852,6 +852,109 @@ internal sealed class OverlayController : IDisposable
 
         profileManager.RenameDisplayName(profile.Name, name);
         RefreshProfiles();
+    }
+
+    private void ShowAddProfile()
+        => _ = AddProfileAsync();
+
+    private async Task AddProfileAsync()
+    {
+        Window? owner = profileManagerWindow?.IsVisible == true
+            ? profileManagerWindow
+            : settingsWindow?.IsVisible == true
+                ? settingsWindow
+                : null;
+        IntPtr nativeOwner = owner is null && overlayWindow?.IsVisible == true
+            ? overlayWindow.Handle
+            : IntPtr.Zero;
+        string? profileName = PromptDialog.Show(
+            owner,
+            nativeOwner,
+            localizer["AddProfileTitle"],
+            localizer["ProfileDirectoryName"],
+            primaryText: localizer["Add"],
+            cancelText: localizer["Cancel"]);
+        if (string.IsNullOrWhiteSpace(profileName))
+        {
+            return;
+        }
+
+        try
+        {
+            string directory = profileManager.CreateProfileDirectory(profileName);
+            RefreshProfiles();
+            string? codexExecutable = CodexCliLocator.FindExecutable();
+            if (codexExecutable is null)
+            {
+                ShowIntegrationError("CodexCliMissingForLogin");
+                return;
+            }
+
+            var loginPlan = new CodexLoginLaunchPlanBuilder().Build(
+                CodexLoginLaunchPlanBuilder.GetWindowsPowerShellPath(),
+                codexExecutable,
+                directory);
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = loginPlan.PowerShellExecutablePath,
+                WorkingDirectory = loginPlan.WorkingDirectory,
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Normal,
+            };
+            foreach (string argument in loginPlan.Arguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+
+            overlayWindow?.ShowNotification(localizer.Format("StartingLogin", profileName));
+            using Process process = Process.Start(startInfo)
+                ?? throw new InvalidOperationException("The Codex login process did not start.");
+            await process.WaitForExitAsync(disposalTokenSource.Token).ConfigureAwait(true);
+            RefreshProfiles();
+
+            ProfileInfo? created = profiles.FirstOrDefault(
+                item => item.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase));
+            if (process.ExitCode != 0 || created?.IsEligibleForSwitching != true)
+            {
+                ShowIntegrationError("AuthNotCreated");
+                return;
+            }
+
+            overlayWindow?.ShowNotification(localizer["ProfileAdded"]);
+            Window? confirmationOwner = profileManagerWindow?.IsVisible == true
+                ? profileManagerWindow
+                : settingsWindow?.IsVisible == true
+                    ? settingsWindow
+                    : null;
+            IntPtr confirmationNativeOwner = confirmationOwner is null && overlayWindow?.IsVisible == true
+                ? overlayWindow.Handle
+                : IntPtr.Zero;
+            if (ConfirmDialog.Show(
+                confirmationOwner,
+                confirmationNativeOwner,
+                localizer["ProfileAdded"],
+                localizer["SwitchNewProfile"],
+                localizer["LaunchWithProfile"],
+                localizer["Cancel"]))
+            {
+                await SwitchProfileAsync(profileName, restartIfActive: false).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException
+                or PlatformNotSupportedException
+                or Win32Exception)
+        {
+            logger.Error("Could not add an isolated Codex profile.", exception);
+            ShowIntegrationError("CouldNotAddProfile");
+            RefreshProfiles();
+        }
     }
 
     private void RemoveProfile(ProfileInfo profile)

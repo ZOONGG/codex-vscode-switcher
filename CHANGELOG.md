@@ -4,6 +4,8 @@
 
 ### Added
 
+- End-to-end profile onboarding from the overlay, Settings, and Profile Manager: create an isolated `CODEX_HOME`, run the official Codex login in a separate terminal, validate the resulting profile, and optionally launch it immediately.
+- Dynamic profile discovery and scrollable profile selection without a silent twelve-profile cutoff.
 - Bundled `ZOONGG.codex-vscode-switcher-companion` extension for sanitized active-workspace tracking, automatic `chatgpt.openSidebar` invocation, a conflict-safe `Ctrl+Alt+C` entry point, and a compact `Codex` status-bar action.
 - Global current-project restoration across account switches, a deduplicated ten-item recent-project list, first-launch project chooser, and explicit missing-project recovery actions.
 - Shared ordinary VS Code extension installation files as the default, with an optional isolated extensions mode.
@@ -44,6 +46,7 @@
 
 ### Fixed
 
+- “Add profile” now starts onboarding instead of reopening the already-visible Profile Manager.
 - VS Code 1.131 application-scoped Codex installations are now loaded from the validated local `openai.chatgpt` package while dedicated `UserData`, `SharedData`, and `CODEX_HOME` isolation remain intact.
 - The portable single-file EXE now embeds and atomically provisions its companion extension under application-owned local data, so copying only the EXE to the desktop still enables workspace reporting and automatic Codex sidebar opening.
 - First-launch project selection now persists the project before resuming the original pending profile, keeps the profile ID across the modal picker, and offers Retry/recovery actions without restarting the switcher.
@@ -68,11 +71,12 @@
 
 ### Security
 
+- Updated the bundled native SQLite library to the first non-vulnerable 2.x release for CVE-2025-6965 / GHSA-2m69-gcr7-jv3q while retaining the .NET 8 data-provider line.
 - Ordinary VS Code processes are rejected unless they match the persisted root PID/start time, exact executable, exact dedicated arguments, and verified process tree.
 - Active-profile state is committed only after a visible managed top-level window is verified.
 - Normal switching never force-kills and never copies profile or authentication data.
 - Production usage refresh no longer starts a separate Codex CLI process with `CODEX_HOME`; stored/manual indicators remain available.
-- Profile selection now returns a localized not-implemented result without touching authentication data.
 - Recursive `CODEX_HOME` backup paths are unavailable.
 - Protected roots and reparse-point paths fail before file operations.
+- Existing reparse-point profile directories are rejected before incomplete-profile retry cleanup.
 - Interactive window styling always removes `WS_EX_TRANSPARENT`; display-mode changes have no auth or process side effects.
