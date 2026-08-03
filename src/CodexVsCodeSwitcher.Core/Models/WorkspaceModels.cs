@@ -50,4 +50,5 @@ public sealed record ManagedCompanionLaunchOptions(
     string ExtensionDirectory,
     string BridgeDirectory,
     string SessionId,
-    bool OpenCodexAutomatically);
+    bool OpenCodexAutomatically,
+    string? OfficialCodexExtensionDirectory = null);

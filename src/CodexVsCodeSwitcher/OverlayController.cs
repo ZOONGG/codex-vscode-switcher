@@ -272,6 +272,20 @@ internal sealed class OverlayController : IDisposable
                 out companion,
                 out Exception? companionFailure))
             {
+                CodexExtensionInstallationInfo? officialCodex =
+                    extensionInstallationLocator.Locate(SelectedExtensionsDirectory);
+                if (officialCodex is null)
+                {
+                    ShowIntegrationError(SelectedExtensionMode == VsCodeExtensionMode.Shared
+                        ? "SharedCodexExtensionMissing"
+                        : "CodexExtensionMissing");
+                    return;
+                }
+
+                companion = companion! with
+                {
+                    OfficialCodexExtensionDirectory = officialCodex.ExtensionPath,
+                };
                 companionSessionStartedAtUtc = DateTimeOffset.UtcNow;
                 companionStateWarningShown = false;
             }

@@ -28,6 +28,12 @@ public sealed class CodexExtensionInstallationLocator
             .Where(static path => !IsReparsePoint(path))
             .OrderByDescending(static path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase))
         {
+            string? version = ReadOfficialVersion(Path.Combine(extensionPath, "package.json"));
+            if (version is null)
+            {
+                continue;
+            }
+
             string backend = Path.Combine(
                 extensionPath,
                 "bin",
@@ -35,22 +41,41 @@ public sealed class CodexExtensionInstallationLocator
                 "codex.exe");
             return new CodexExtensionInstallationInfo(
                 extensionPath,
-                ReadVersion(Path.Combine(extensionPath, "package.json")),
+                version,
                 File.Exists(backend) && !IsReparsePoint(backend) ? backend : null);
         }
 
         return null;
     }
 
-    private static string? ReadVersion(string packageFile)
+    private static string? ReadOfficialVersion(string packageFile)
     {
         try
         {
-            using FileStream stream = File.OpenRead(packageFile);
+            if (!File.Exists(packageFile) || IsReparsePoint(packageFile))
+            {
+                return null;
+            }
+
+            using FileStream stream = new(
+                packageFile,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read);
+            if (stream.Length is <= 0 or > 1024 * 1024)
+            {
+                return null;
+            }
+
             using JsonDocument document = JsonDocument.Parse(stream);
-            return document.RootElement.TryGetProperty("version", out JsonElement version)
-                && version.ValueKind == JsonValueKind.String
-                ? version.GetString()
+            JsonElement root = document.RootElement;
+            string? publisher = ReadString(root, "publisher");
+            string? name = ReadString(root, "name");
+            string? version = ReadString(root, "version");
+            return publisher?.Equals("openai", StringComparison.OrdinalIgnoreCase) == true
+                && name?.Equals("chatgpt", StringComparison.OrdinalIgnoreCase) == true
+                && version is { Length: > 0 and <= 64 }
+                ? version
                 : null;
         }
         catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
@@ -58,6 +83,12 @@ public sealed class CodexExtensionInstallationLocator
             return null;
         }
     }
+
+    private static string? ReadString(JsonElement root, string propertyName)
+        => root.TryGetProperty(propertyName, out JsonElement value)
+            && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 
     private static bool IsReparsePoint(string path)
     {

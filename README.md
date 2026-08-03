@@ -86,7 +86,7 @@ On first launch, **Which project should Codex open?** lets the user choose a pro
 
 ## Codex extension and workspaces
 
-The managed environment detects the official Marketplace extension `openai.chatgpt` in the active extension directory. Shared mode never installs, updates, removes, enables, disables, or modifies ordinary extensions. Installation occurs only after an explicit action in isolated mode and targets only the dedicated extension directory.
+The managed environment detects the official Marketplace extension `openai.chatgpt` in the active extension directory. Shared mode never installs, updates, removes, or changes ordinary extension files or enablement records. Because VS Code 1.131 marks Codex as application-scoped, the managed launch adds the validated local package as a second development-extension path; dedicated `UserData`, `SharedData`, and `CODEX_HOME` remain isolated. Installation occurs only after an explicit action in isolated mode and targets only the dedicated extension directory.
 
 Settings includes sanitized DNS/TCP/TLS/HTTPS/WebSocket/backend diagnostics, a safe
 regular-vs-managed comparison, an allowlist-only proxy settings copy, optional

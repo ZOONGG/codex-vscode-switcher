@@ -158,14 +158,17 @@ public sealed class WorkspaceAndCompanionLifecycleTests
         string executable = Path.Combine(layout.LocalAppData, "Code.exe");
         string profile = Path.Combine(layout.Paths.ProfilesDirectory, "fake");
         string companion = Path.Combine(layout.LocalAppData, "companion");
+        string officialCodex = Path.Combine(layout.UserProfile, ".vscode", "extensions", "openai.chatgpt-1.2.3");
         Directory.CreateDirectory(profile);
         Directory.CreateDirectory(companion);
+        Directory.CreateDirectory(officialCodex);
         var builder = new VsCodeLaunchPlanBuilder();
         var options = new ManagedCompanionLaunchOptions(
             companion,
             layout.Paths.BridgeDirectory,
             "safe-session",
-            true);
+            true,
+            officialCodex);
 
         VsCodeProcessStartSpec managed = builder.Build(
             executable,
@@ -183,7 +186,14 @@ public sealed class WorkspaceAndCompanionLifecycleTests
             profile,
             null);
 
-        Assert.Contains("--extensionDevelopmentPath", managed.Arguments);
+        int[] developmentPathIndexes = managed.Arguments
+            .Select((argument, index) => (argument, index))
+            .Where(static item => item.argument == "--extensionDevelopmentPath")
+            .Select(static item => item.index)
+            .ToArray();
+        Assert.Equal(2, developmentPathIndexes.Length);
+        Assert.Equal(companion, managed.Arguments[developmentPathIndexes[0] + 1]);
+        Assert.Equal(officialCodex, managed.Arguments[developmentPathIndexes[1] + 1]);
         Assert.Contains(CompanionBridgeService.BridgePathEnvironmentVariable, managed.EnvironmentOverrides.Keys);
         Assert.DoesNotContain("--extensionDevelopmentPath", ordinary.Arguments);
         Assert.DoesNotContain(CompanionBridgeService.BridgePathEnvironmentVariable, ordinary.EnvironmentOverrides.Keys);

@@ -23,7 +23,7 @@ Every launch supplies the exact dedicated `--user-data-dir`, `--shared-data-dir`
 
 `ProcessStartInfo` retains the complete parent environment and applies only process-local application overrides. `CODEX_HOME` is always overridden. An explicitly configured existing CA path may additionally override only `CODEX_CA_CERTIFICATE` or `SSL_CERT_FILE`; values are never logged and no global environment is changed.
 
-Managed launches also pass an application-owned `--extensionDevelopmentPath` and four process-local `CODEX_VSCODE_SWITCHER_*` values: bridge directory, random session ID, automatic-open flag, and dedicated user-data path. These values are absent from ordinary VS Code launches.
+Managed launches pass the application-owned companion as one `--extensionDevelopmentPath` and, when found, the exact validated local `openai.chatgpt` package as a second path. The latter is required because VS Code 1.131 hides application-scoped extensions from a dedicated `--user-data-dir`; it does not copy or register the package and leaves ordinary extension files unchanged. Four process-local `CODEX_VSCODE_SWITCHER_*` values carry the bridge directory, random session ID, automatic-open flag, and dedicated user-data path. These arguments and values are absent from ordinary VS Code launches.
 
 ## Workspace bridge
 
@@ -51,7 +51,7 @@ If the new launch fails after a previous managed instance closed, one rollback l
 
 ## Extension and settings
 
-`CodexExtensionManager` scans the selected extension root for `openai.chatgpt-*` and reads only the extension version. Shared mode is read-only and never installs during startup or through the switcher. Explicit install uses the configured VS Code executable only in isolated mode.
+`CodexExtensionManager` scans the selected extension root for `openai.chatgpt-*` and reads only the extension version. Before a package is admitted as a development path, `CodexExtensionInstallationLocator` rejects reparse points, bounds the manifest read, and requires the exact `openai.chatgpt` publisher/name identity. Shared mode is read-only and never installs during startup or through the switcher. Explicit install uses the configured VS Code executable only in isolated mode.
 
 Network diagnostics use credential-free probes for DNS, TCP 443, TLS, HTTPS, secure WebSocket capability, system proxy detection, custom CA availability, and `codex.exe --version`. HTTP 401/403 proves network reachability and is reported as authentication after successful networking. Reports contain only allowlisted paths, hashes, process parentage/start times, setting names, environment variable names, and sanitized errors.
 

@@ -44,6 +44,7 @@
 
 ### Fixed
 
+- VS Code 1.131 application-scoped Codex installations are now loaded from the validated local `openai.chatgpt` package while dedicated `UserData`, `SharedData`, and `CODEX_HOME` isolation remain intact.
 - The portable single-file EXE now embeds and atomically provisions its companion extension under application-owned local data, so copying only the EXE to the desktop still enables workspace reporting and automatic Codex sidebar opening.
 - First-launch project selection now persists the project before resuming the original pending profile, keeps the profile ID across the modal picker, and offers Retry/recovery actions without restarting the switcher.
 - Missing or delayed companion/sidebar readiness no longer prevents or invalidates a verified managed VS Code launch.

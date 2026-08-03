@@ -56,6 +56,25 @@ public sealed class VsCodeLaunchPlanBuilder
                 nameof(companion.BridgeDirectory));
             arguments.Add("--extensionDevelopmentPath");
             arguments.Add(extensionDirectory);
+            if (!string.IsNullOrWhiteSpace(companion.OfficialCodexExtensionDirectory))
+            {
+                string officialCodexExtension = RequireFullPath(
+                    companion.OfficialCodexExtensionDirectory,
+                    nameof(companion.OfficialCodexExtensionDirectory));
+                if (officialCodexExtension.Equals(extensionDirectory, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new ArgumentException(
+                        "The companion and official Codex extension paths must be different.",
+                        nameof(companion));
+                }
+
+                // VS Code 1.131 treats Codex as application-scoped. A dedicated
+                // --user-data-dir therefore hides the otherwise shared installation.
+                // Loading the already validated local package as a second development
+                // extension preserves user-data and CODEX_HOME isolation.
+                arguments.Add("--extensionDevelopmentPath");
+                arguments.Add(officialCodexExtension);
+            }
             environment[CompanionBridgeService.BridgePathEnvironmentVariable] = bridgeDirectory;
             environment[CompanionBridgeService.SessionEnvironmentVariable] = companion.SessionId;
             environment[CompanionBridgeService.OpenCodexEnvironmentVariable] =

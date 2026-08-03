@@ -97,7 +97,9 @@ public sealed class VsCodeNetworkingRecoveryTests
         string extension = Path.Combine(root, $"openai.chatgpt-{version}-win32-x64");
         string bin = Path.Combine(extension, "bin", "windows-x86_64");
         Directory.CreateDirectory(bin);
-        File.WriteAllText(Path.Combine(extension, "package.json"), $"{{\"version\":\"{version}\"}}");
+        File.WriteAllText(
+            Path.Combine(extension, "package.json"),
+            $$"""{"publisher":"openai","name":"chatgpt","version":"{{version}}"}""");
         File.WriteAllText(Path.Combine(bin, "codex.exe"), backendContents);
     }
 }
