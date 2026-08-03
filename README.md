@@ -82,6 +82,8 @@ Force-close is not used by the normal workflow.
 
 Clicking a profile starts this flow directly. The clicked profile is Pending until its new window is verified, then becomes Active. Success, failure, timeout, and cancellation all release the switch lock and re-enable profile controls.
 
+On first launch, **Which project should Codex open?** lets the user choose a project folder, a `.code-workspace` project file, or open without a project. The chosen project is stored atomically before the original pending profile activation resumes; a failed launch keeps that choice available for Retry.
+
 ## Codex extension and workspaces
 
 The managed environment detects the official Marketplace extension `openai.chatgpt` in the active extension directory. Shared mode never installs, updates, removes, enables, disables, or modifies ordinary extensions. Installation occurs only after an explicit action in isolated mode and targets only the dedicated extension directory.
@@ -98,6 +100,8 @@ The switcher bundles a lightweight companion extension only for the dedicated Co
 Opening a folder or `.code-workspace` inside Codex VS Code automatically updates one global current project shared by all Codex account profiles. The current project reopens after profile switches and restarts. Up to ten deduplicated recent projects are available in Settings and the tray; missing projects remain visible until the user chooses another folder, opens an empty window, or removes the entry.
 
 After a verified managed window appears, the companion activates the official extension and invokes `chatgpt.openSidebar` with bounded retries. **Open Codex automatically** is enabled by default. `Ctrl+Alt+C` and the compact status-bar item **Codex** reopen and focus the sidebar; an existing dedicated keybinding is reported and left unchanged.
+
+Managed-window verification is the launch success boundary. A missing/delayed companion report or a failed sidebar command produces a separate warning and never turns an already verified Codex VS Code window into a launch failure.
 
 **Import my VS Code setup** is optional and confirmation-only. Its preview lists the allowed settings, keybindings, snippets, named-profile files, and extension count. It never copies storage databases, sessions, credentials, cookies, machine identifiers, logs, or temporary files. Chosen extension IDs are installed separately into the dedicated extensions directory.
 

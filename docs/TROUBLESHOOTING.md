@@ -32,6 +32,10 @@ Save or discard changes in the managed VS Code window, then try again. The switc
 
 Choose another folder or `.code-workspace`, or explicitly open an empty window. The missing remembered path is not silently erased.
 
+## VS Code launched but the companion is delayed
+
+The managed window remains a successful launch. Use **Open Codex now** or wait for the project report. Companion/sidebar warnings never close the managed window, roll back the selected profile, or erase the selected project.
+
 ## Logs
 
 Sanitized logs are stored under `%LOCALAPPDATA%\CodexVsCodeSwitcher\logs`.
