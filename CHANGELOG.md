@@ -46,6 +46,7 @@
 
 ### Fixed
 
+- Compact Codex usage rows and release diagnostics now handle LF and CRLF line endings consistently across local and CI environments.
 - Managed Codex now uses VS Code's production application registry; only the local companion bridge is loaded as a development extension. Shared mode no longer overrides `--shared-data-dir`, so application-scoped Codex activates normally and profile chat history loads.
 - “Add profile” now starts onboarding instead of reopening the already-visible Profile Manager.
 - VS Code 1.131 application-scoped Codex installations are now loaded from the ordinary production registry while dedicated user data and profile-specific `CODEX_HOME` remain intact.

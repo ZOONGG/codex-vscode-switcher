@@ -228,7 +228,7 @@ public static class CodexStatusParser
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex CompactLimitRowPattern = new(
-        @"(?im)^\s*(?<label>5h|Weekly)\s+(?<percent>\d{1,3})\s*%(?:\s+(?<reset>[^\r\n]+))?$",
+        @"(?im)^[^\S\r\n]*(?<label>5h|Weekly)[^\S\r\n]+(?<percent>\d{1,3})[^\S\r\n]*%(?:[^\S\r\n]+(?<reset>[^\r\n]+?))?[^\S\r\n]*\r?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public static string StripTerminalControlSequences(string value)

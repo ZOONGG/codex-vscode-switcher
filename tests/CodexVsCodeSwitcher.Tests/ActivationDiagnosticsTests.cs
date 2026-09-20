@@ -40,7 +40,7 @@ public sealed class ActivationDiagnosticsTests
             stage: window-detection
             exceptionType: TimeoutException
             message: access_token=<redacted> for <redacted-email>
-            """,
+            """.ReplaceLineEndings("\n"),
             formatted);
         Assert.DoesNotContain("dummy", formatted, StringComparison.Ordinal);
         Assert.DoesNotContain("person@", formatted, StringComparison.Ordinal);

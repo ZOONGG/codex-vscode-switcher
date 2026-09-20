@@ -74,16 +74,18 @@ public sealed class CodexStatusParserTests
         Assert.Equal("🔴", ProfileIndicatorFormatter.FormatAutomatic(snapshot, true, 60, 25, snapshot.CapturedAt, TimeSpan.FromMinutes(90), false));
     }
 
-    [Fact]
-    public void Parse_SupportsCodexDesktopCompactUsageMenuRows()
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void Parse_SupportsCodexDesktopCompactUsageMenuRows(string lineEnding)
     {
-        UsageSnapshot snapshot = Parse("""
-            Usage remaining 5%
-
-            5h        69%     9:58 PM
-            Weekly     5%     Jul 9
-            Upgrade to Pro
-            """);
+        UsageSnapshot snapshot = Parse(string.Join(
+            lineEnding,
+            "Usage remaining 5%",
+            string.Empty,
+            "5h        69%     9:58 PM",
+            "Weekly     5%     Jul 9",
+            "Upgrade to Pro"));
 
         Assert.Equal(2, snapshot.Windows.Count);
         Assert.Equal(69, snapshot.Windows.Single(window => window.Name == "5h").RemainingPercent);
