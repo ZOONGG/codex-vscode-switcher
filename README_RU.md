@@ -2,6 +2,8 @@
 
 Codex VS Code Switcher — независимое Windows-приложение для запуска одного изолированного управляемого экземпляра Visual Studio Code с выбранным профилем Codex.
 
+Текущий стабильный релиз — **v1.0.0**. Скачайте отдельный `CodexVsCodeSwitcher.exe` или полный portable-пакет `CodexVsCodeSwitcher-win-x64-portable.zip` в разделе [GitHub Releases](https://github.com/ZOONGG/codex-vscode-switcher/releases/latest). Проверьте скачанный файл по `SHA256SUMS.txt` из того же релиза.
+
 Программа не переключает ChatGPT Desktop, не заменяет общий файл авторизации и не управляет обычными окнами VS Code.
 
 ## Изоляция
@@ -11,17 +13,17 @@ Codex VS Code Switcher — независимое Windows-приложение �
 ```text
 Code.exe
   --user-data-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeData"
-  --shared-data-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeSharedData"
   --new-window
   [необязательная папка или .code-workspace]
 ```
 
 По умолчанию включено **«Использовать мои расширения VS Code»**, поэтому аргумент
 `--extensions-dir` не передаётся и используется `%USERPROFILE%\.vscode\extensions`.
-Общими являются только файлы установки расширений; user data, настройки, storage,
-cookies, состояние входа и `CODEX_HOME` остаются изолированными. В расширенном
-изолированном режиме передаётся
-`--extensions-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeExtensions"`.
+Обычный реестр приложений VS Code сохраняется, поэтому application-scoped расширения,
+включая Codex, остаются включёнными. User data, настройки, cookies и `CODEX_HOME`
+остаются изолированными. В расширенном изолированном режиме передаются
+`--extensions-dir "%LOCALAPPDATA%\CodexVsCodeSwitcher\VSCodeExtensions"` и отдельный
+`--shared-data-dir`.
 
 `CODEX_HOME` добавляется только в `ProcessStartInfo.Environment` этого запуска и указывает прямо на выбранный каталог в `%USERPROFILE%\.codex-vscode-profiles`. Профиль и `auth.json` не копируются и не заменяются.
 
@@ -57,7 +59,7 @@ cookies, состояние входа и `CODEX_HOME` остаются изол
 
 - совпадают сохранённый root PID и время запуска процесса;
 - точно совпадает путь к настроенному или найденному VS Code;
-- в командной строке root-процесса есть точные `--user-data-dir` и `--shared-data-dir`, а `--extensions-dir` отсутствует в общем режиме или точно указывает на отдельную папку в изолированном;
+- в командной строке root-процесса есть точный `--user-data-dir`; общий режим запрещает оба аргумента переопределения storage, а изолированный режим требует точные `--extensions-dir` и `--shared-data-dir`;
 - окно принадлежит root-процессу или проверенному потомку;
 - HWND остаётся видимым окном верхнего уровня этого дерева процессов.
 
@@ -99,7 +101,7 @@ cookies, состояние входа и `CODEX_HOME` остаются изол
 
 ## Расширение Codex и workspace
 
-Официальное расширение `openai.chatgpt` определяется в активной папке расширений. Общий режим никогда не устанавливает, не обновляет, не удаляет и не изменяет файлы или записи включения обычных расширений. Поскольку VS Code 1.131 помечает Codex как application-scoped, управляемый запуск добавляет проверенный локальный пакет вторым development-extension path; отдельные `UserData`, `SharedData` и `CODEX_HOME` сохраняются. Явная установка доступна только в изолированном режиме и использует отдельную папку.
+Официальное расширение `openai.chatgpt` определяется в активной папке расширений. Общий режим никогда не устанавливает, не обновляет, не удаляет и не изменяет файлы или записи включения обычных расширений. Поскольку VS Code 1.131 помечает Codex как application-scoped, общий режим сохраняет обычный реестр приложений VS Code при отдельных user data и профильном `CODEX_HOME`. Поэтому официальный пакет OpenAI работает как production-расширение. Явная установка доступна только в изолированном режиме и использует отдельную папку.
 
 В настройках доступны санитизированные проверки DNS/TCP/TLS/HTTPS/WebSocket/backend,
 безопасное сравнение обычного и управляемого VS Code, allowlist-копирование настроек

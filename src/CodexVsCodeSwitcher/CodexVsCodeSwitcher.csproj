@@ -13,7 +13,7 @@
     <AssemblyName>CodexVsCodeSwitcher</AssemblyName>
     <RootNamespace>CodexVsCodeSwitcher</RootNamespace>
     <Product>Codex VS Code Switcher</Product>
-    <Description>Bootstrap shell for isolated Codex profiles in a dedicated Visual Studio Code instance.</Description>
+    <Description>Switch between isolated Codex profiles in a dedicated Visual Studio Code environment.</Description>
     <Company>ZOONGG</Company>
   </PropertyGroup>
   <ItemGroup>

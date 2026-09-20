@@ -2,6 +2,8 @@
 
 Codex VS Code Switcher is an independent Windows application for running one isolated, managed Visual Studio Code environment with selectable Codex profiles.
 
+The current stable release is **v1.0.0**. Download `CodexVsCodeSwitcher.exe` for the standalone app or `CodexVsCodeSwitcher-win-x64-portable.zip` for the complete portable package from [GitHub Releases](https://github.com/ZOONGG/codex-vscode-switcher/releases/latest). Verify either download with `SHA256SUMS.txt` from the same release.
+
 It does not switch ChatGPT Desktop, does not replace a shared authentication file, and does not control ordinary VS Code windows.
 
 ## How isolation works

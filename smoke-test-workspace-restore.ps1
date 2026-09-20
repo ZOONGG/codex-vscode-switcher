@@ -95,7 +95,7 @@ function Wait-ForBridgeState {
         if (Test-Path -LiteralPath $stateFile -PathType Leaf) {
             try {
                 $state = Get-Content -Raw -LiteralPath $stateFile | ConvertFrom-Json
-                $timestamp = [DateTimeOffset]::Parse($state.timestampUtc)
+                $timestamp = [DateTimeOffset]$state.timestampUtc
                 if ($state.sessionId -eq $SessionId -and $timestamp -gt $AfterTimestamp) {
                     if ([string]::IsNullOrWhiteSpace($RequiredSidebarStatus) -or
                         $state.sidebarStatus -eq $RequiredSidebarStatus) {
@@ -141,7 +141,7 @@ function Start-SmokeCycle {
     if ($state.workspaceType -ne "Folder") { throw "The active workspace was not reported as a folder." }
     if (-not $state.codexExtensionInstalled) { throw "The official Codex extension is unavailable in shared mode." }
 
-    $beforeCommand = [DateTimeOffset]::Parse($state.timestampUtc)
+    $beforeCommand = [DateTimeOffset]$state.timestampUtc
     $command = [ordered]@{
         protocolVersion = 1
         sessionId = $session

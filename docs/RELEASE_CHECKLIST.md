@@ -1,13 +1,15 @@
 # Release checklist
 
-- Confirm branch is `codex/fix-project-launch-after-picker`.
-- Confirm no push or public release is planned.
+- Confirm every intended local branch tip is an ancestor of the release commit.
+- Confirm the release version is consistent in project metadata, companion metadata, README files, changelog, tag, and release title.
+- Run `dotnet format CodexVsCodeSwitcher.sln` and verify the resulting diff.
+- Run a Release build with analyzers and warnings treated as errors.
 - Run `.\verify-repository-safety.ps1`.
 - Run `.\build-companion.ps1`.
 - Run `.\test.ps1`.
 - Run `.\build.ps1`.
 - Run `.\publish.ps1`.
-- Run `.\publish.ps1 -ArtifactLabel real-e2e-test` for the local handoff build.
+- Run the native dependency vulnerability audit against the restored project graph.
 - Run `.\smoke-test-vscode.ps1 -ExtensionMode All` and require two shared plus two isolated exact-instance cycles to pass.
 - Run `.\smoke-test-workspace-restore.ps1` and require the same project in two distinct VS Code windows, remembered-project restore, simulated profile switch, `chatgpt.openSidebar`, and ordinary-VS-Code isolation to pass.
 - Run the disposable credential-free network diagnostic and require the HTTPS stage to return a response.
@@ -15,3 +17,6 @@
 - Follow `docs/manual-test-checklist.md` using only the managed VS Code instance.
 - Confirm `.codex` and original application data timestamps did not change.
 - Do not upload credentials, local settings, logs, backups, or profile homes.
+- Push the release commit to `main`, create and push the annotated version tag, and publish a non-draft, non-prerelease GitHub release.
+- Upload only the EXE, portable ZIP, and SHA256SUMS; use GitHub's automatic source archives.
+- Verify the tag target, downloadable assets, `main` README, and Latest release status through the GitHub API.

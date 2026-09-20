@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [1.0.0] - 2026-09-20
 
 ### Added
 
@@ -26,7 +26,7 @@
 - Independent Codex VS Code Switcher product identity and local migration branch.
 - Central `CodexVsCodeStorageLayout` for app data, logs, backups, transactions, profile homes, dedicated VS Code data/extensions, and workspace metadata.
 - Case-insensitive normalized protected-path policy for the main `.codex` root and original CodexProfileOverlay data.
-- Bootstrap VS Code contracts, launch models, profile model, settings, and localized integration status.
+- Core VS Code contracts, launch models, profile model, settings, and localized integration status.
 - Explicit read-only legacy profile migration planner.
 - Allowlist-only minimal backup service with 10 MB/file, 25 MB/transaction, five-backup, and 100 MB retention limits.
 - Isolation, protected-path, managed activation, migration, backup, and product-identity tests.
@@ -38,7 +38,7 @@
 
 - The overlay is non-topmost and defaults to visibility only with foreground managed VS Code.
 - Dedicated VS Code and profile roots are enforced product paths rather than editable arbitrary directories.
-- Profile selection now performs real managed VS Code activation instead of returning the bootstrap unavailable result.
+- Profile selection now performs real managed VS Code activation instead of returning an unavailable placeholder result.
 - Renamed solution, projects, namespaces, executable, startup entry, shortcuts, package names, and UI text to Codex VS Code Switcher.
 - Moved all mutable application state to independent roots.
 - Restored Compact, Expanded, and Auto controls in both floating and VS Code-attached overlay states.
@@ -81,3 +81,5 @@
 - Protected roots and reparse-point paths fail before file operations.
 - Existing reparse-point profile directories are rejected before incomplete-profile retry cleanup.
 - Interactive window styling always removes `WS_EX_TRANSPARENT`; display-mode changes have no auth or process side effects.
+
+[1.0.0]: https://github.com/ZOONGG/codex-vscode-switcher/releases/tag/v1.0.0
